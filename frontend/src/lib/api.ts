@@ -1,6 +1,6 @@
 import { TestCase, EvaluationResult, GenerateResponse, RunStats, OptimizeResponse } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = "http://localhost:8000";
 
 class ApiClient {
   private async request<T>(
@@ -23,12 +23,15 @@ class ApiClient {
     return response.json();
   }
 
-  async generateTestCases(intent: string, count: number = 10): Promise<TestCase[]> {
-    const response = await this.request<GenerateResponse>("/api/generate", {
+  async generateTestCases(
+    intent: string,
+    count: number = 50,
+    model: string = "gpt-4o"
+  ): Promise<GenerateResponse> {
+    return this.request<GenerateResponse>("/api/generate", {
       method: "POST",
-      body: JSON.stringify({ intent, count }),
+      body: JSON.stringify({ intent, count, model }),
     });
-    return response.test_cases;
   }
 
   async runEvaluation(

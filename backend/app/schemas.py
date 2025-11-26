@@ -3,6 +3,37 @@ from typing import Literal
 from uuid import uuid4
 
 
+# LLM Response Schemas (for structured output)
+class GeneratedTestCase(BaseModel):
+    """Schema for a single test case from LLM generation."""
+    input_text: str
+    expected_verdict: Literal["PASS", "FAIL"]
+    difficulty: Literal["clear_pass", "clear_fail", "tricky_negative", "tricky_positive"]
+    reasoning: str
+
+
+class GeneratedTestCaseList(BaseModel):
+    """Schema for LLM response containing generated test cases."""
+    test_cases: list[GeneratedTestCase]
+
+
+class JudgeVerdict(BaseModel):
+    """Schema for LLM judge evaluation response."""
+    verdict: Literal["PASS", "FAIL"]
+    reasoning: str
+
+
+class OptimizedPromptResponse(BaseModel):
+    """Schema for LLM prompt optimization response."""
+    optimized_prompt: str
+    modification_notes: str
+
+
+class GeneratedSystemPrompt(BaseModel):
+    """Schema for LLM-generated initial system prompt."""
+    system_prompt: str
+
+
 class TestCase(BaseModel):
     """A single test case for evaluating the judge."""
     id: str = Field(default_factory=lambda: str(uuid4()))
@@ -23,12 +54,14 @@ class EvaluationResult(BaseModel):
 class GenerateRequest(BaseModel):
     """Request to generate synthetic test cases."""
     intent: str = Field(..., description="The intent to generate test cases for")
-    count: int = Field(default=10, ge=1, le=50, description="Number of test cases to generate")
+    count: int = Field(default=50, ge=1, le=100, description="Number of test cases to generate")
+    model: str = Field(default="gpt-4o", description="LiteLLM model name for generation")
 
 
 class GenerateResponse(BaseModel):
-    """Response containing generated test cases."""
+    """Response containing generated test cases and initial system prompt."""
     test_cases: list[TestCase]
+    system_prompt: str = Field(..., description="Generated initial system prompt based on intent")
 
 
 class RunRequest(BaseModel):

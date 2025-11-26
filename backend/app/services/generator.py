@@ -1,6 +1,11 @@
-import json
-import litellm
-from app.schemas import TestCase
+"""Test case and system prompt generation service."""
+
+from app.schemas import (
+    TestCase,
+    GeneratedTestCaseList,
+    GeneratedSystemPrompt,
+)
+from app.services.llm import call_llm
 
 
 GENERATION_PROMPT = """You are an expert at generating diverse test cases for AI evaluation systems.
@@ -15,57 +20,67 @@ CRITICAL REQUIREMENTS:
 
 INTENT: {intent}
 
-Respond with a JSON array of test cases in this exact format:
-[
-  {{
-    "input_text": "The text to evaluate",
-    "expected_result": "PASS" or "FAIL",
-    "difficulty": "clear_pass" | "clear_fail" | "tricky_negative" | "tricky_positive",
-    "reasoning": "Detailed explanation of why this should pass/fail"
-  }},
-  ...
-]
-
-Only respond with the JSON array, no other text."""
+Generate {count} test cases following the schema provided."""
 
 
-async def generate_test_cases(intent: str, count: int = 10, model: str = "gpt-4o") -> list[TestCase]:
-    """Generate synthetic test cases for a given intent using an LLM."""
+SYSTEM_PROMPT_GENERATION = """You are an expert at writing system prompts for AI judges.
 
-    prompt = GENERATION_PROMPT.format(intent=intent, count=count)
+Given an INTENT that describes what the judge should detect/evaluate, write a clear, comprehensive system prompt that will guide the judge to make accurate verdicts.
 
-    response = await litellm.acompletion(
+The system prompt should:
+1. Clearly define what constitutes a PASS vs FAIL verdict
+2. List specific criteria or rules the judge should follow
+3. Handle edge cases and ambiguous situations
+4. Be concise but thorough
+
+INTENT: {intent}
+
+Generate a system prompt for this judge."""
+
+
+async def generate_test_cases(
+    intent: str, count: int = 50, model: str = "gpt-4o"
+) -> tuple[list[TestCase], str]:
+    """
+    Generate synthetic test cases and an initial system prompt for a given intent.
+
+    Args:
+        intent: The intent description for the judge
+        count: Number of test cases to generate
+        model: LiteLLM model name
+
+    Returns:
+        Tuple of (list of TestCase objects, generated system prompt)
+    """
+    # Generate test cases using structured output
+    test_cases_prompt = GENERATION_PROMPT.format(intent=intent, count=count)
+
+    generated = await call_llm(
+        messages=[{"role": "user", "content": test_cases_prompt}],
+        response_model=GeneratedTestCaseList,
         model=model,
-        messages=[{"role": "user", "content": prompt}],
         temperature=0.8,
-        response_format={"type": "json_object"}
     )
 
-    content = response.choices[0].message.content
-
-    # Parse the JSON response
-    try:
-        # Handle both array and object responses
-        parsed = json.loads(content)
-        if isinstance(parsed, dict):
-            # If it's an object, look for a test_cases or similar key
-            cases_data = parsed.get("test_cases", parsed.get("cases", [parsed]))
-            if not isinstance(cases_data, list):
-                cases_data = [cases_data]
-        else:
-            cases_data = parsed
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse LLM response as JSON: {e}")
-
     # Convert to TestCase objects
-    test_cases = []
-    for case_data in cases_data:
-        test_case = TestCase(
-            input_text=case_data["input_text"],
-            expected_verdict=case_data["expected_verdict"],
-            reasoning=case_data["reasoning"],
-            verified=False
+    test_cases = [
+        TestCase(
+            input_text=case.input_text,
+            expected_verdict=case.expected_verdict,
+            reasoning=case.reasoning,
+            verified=False,
         )
-        test_cases.append(test_case)
+        for case in generated.test_cases
+    ]
 
-    return test_cases
+    # Generate initial system prompt
+    system_prompt_prompt = SYSTEM_PROMPT_GENERATION.format(intent=intent)
+
+    system_prompt_response = await call_llm(
+        messages=[{"role": "user", "content": system_prompt_prompt}],
+        response_model=GeneratedSystemPrompt,
+        model=model,
+        temperature=0.7,
+    )
+
+    return test_cases, system_prompt_response.system_prompt

@@ -16,13 +16,14 @@ router = APIRouter(prefix="/api", tags=["api"])
 
 @router.post("/generate", response_model=GenerateResponse)
 async def generate_endpoint(request: GenerateRequest) -> GenerateResponse:
-    """Generate synthetic test cases for a given intent."""
+    """Generate synthetic test cases and initial system prompt for a given intent."""
     try:
-        test_cases = await generate_test_cases(
+        test_cases, system_prompt = await generate_test_cases(
             intent=request.intent,
-            count=request.count
+            count=request.count,
+            model=request.model,
         )
-        return GenerateResponse(test_cases=test_cases)
+        return GenerateResponse(test_cases=test_cases, system_prompt=system_prompt)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

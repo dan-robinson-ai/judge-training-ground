@@ -1,5 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from dotenv import load_dotenv
 
 from app.routers.api import router as api_router
@@ -7,20 +9,34 @@ from app.routers.api import router as api_router
 # Load environment variables from .env file
 load_dotenv()
 
+print("=== LOADING MAIN.PY V2 - CUSTOM CORS ===")  # DEBUG
+
 app = FastAPI(
     title="Judge Training Ground",
     description="A training ground for LLM judges - generate test cases, evaluate, and optimize prompts",
     version="1.0.0"
 )
 
-# Configure CORS for frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+# Custom CORS middleware to ensure headers are set
+@app.middleware("http")
+async def add_cors_headers(request: Request, call_next):
+    # Handle preflight
+    if request.method == "OPTIONS":
+        return JSONResponse(
+            content={},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            },
+        )
+
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
 
 # Include API routes
 app.include_router(api_router)

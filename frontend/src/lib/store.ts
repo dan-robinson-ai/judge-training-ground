@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { TestCase, EvaluationResult, RunStats } from "./types";
+import { TestCase, RunStats } from "./types";
 import { api } from "./api";
 
 interface TrainingStore {
@@ -9,6 +9,8 @@ interface TrainingStore {
   testCases: TestCase[];
   runStats: RunStats | null;
   selectedModel: string;
+  generateCount: number;
+  hasGenerated: boolean;
   isGenerating: boolean;
   isRunning: boolean;
   isOptimizing: boolean;
@@ -19,6 +21,7 @@ interface TrainingStore {
   setIntent: (intent: string) => void;
   setSystemPrompt: (prompt: string) => void;
   setSelectedModel: (model: string) => void;
+  setGenerateCount: (count: number) => void;
   setActiveTab: (tab: "dataset" | "results") => void;
   clearError: () => void;
 
@@ -28,25 +31,20 @@ interface TrainingStore {
   addTestCase: (testCase: TestCase) => void;
 
   // Async actions
-  generateTestCases: (count?: number) => Promise<void>;
+  generateTestCases: () => Promise<void>;
   runEvaluation: () => Promise<void>;
   optimizePrompt: () => Promise<void>;
 }
 
-const DEFAULT_SYSTEM_PROMPT = `You are a content moderation judge. Your task is to evaluate user inputs and determine if they should PASS or FAIL based on the following criteria:
-
-- PASS: The content is appropriate, helpful, and does not violate any guidelines.
-- FAIL: The content is inappropriate, harmful, or violates guidelines.
-
-Be thorough in your analysis and consider edge cases carefully.`;
-
 export const useTrainingStore = create<TrainingStore>((set, get) => ({
   // Initial state
   intent: "",
-  systemPrompt: DEFAULT_SYSTEM_PROMPT,
+  systemPrompt: "",
   testCases: [],
   runStats: null,
   selectedModel: "gpt-4o",
+  generateCount: 50,
+  hasGenerated: false,
   isGenerating: false,
   isRunning: false,
   isOptimizing: false,
@@ -57,6 +55,7 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
   setIntent: (intent) => set({ intent }),
   setSystemPrompt: (systemPrompt) => set({ systemPrompt }),
   setSelectedModel: (selectedModel) => set({ selectedModel }),
+  setGenerateCount: (generateCount) => set({ generateCount }),
   setActiveTab: (activeTab) => set({ activeTab }),
   clearError: () => set({ error: null }),
 
@@ -79,8 +78,8 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
     })),
 
   // Async actions
-  generateTestCases: async (count = 10) => {
-    const { intent } = get();
+  generateTestCases: async () => {
+    const { intent, generateCount, selectedModel } = get();
     if (!intent.trim()) {
       set({ error: "Please enter an intent first" });
       return;
@@ -88,8 +87,13 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
 
     set({ isGenerating: true, error: null });
     try {
-      const testCases = await api.generateTestCases(intent, count);
-      set({ testCases, isGenerating: false });
+      const response = await api.generateTestCases(intent, generateCount, selectedModel);
+      set({
+        testCases: response.test_cases,
+        systemPrompt: response.system_prompt,
+        hasGenerated: true,
+        isGenerating: false,
+      });
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : "Generation failed",

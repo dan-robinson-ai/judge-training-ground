@@ -1,6 +1,8 @@
+"""Prompt optimization service."""
+
 import json
-import litellm
-from app.schemas import TestCase, EvaluationResult, OptimizeResponse
+from app.schemas import TestCase, EvaluationResult, OptimizeResponse, OptimizedPromptResponse
+from app.services.llm import call_llm
 
 
 OPTIMIZATION_PROMPT = """You are an expert prompt engineer. Your task is to improve a system prompt based on evaluation results.
@@ -20,20 +22,14 @@ Analyze why the judge failed on the failed cases and rewrite the system prompt t
 3. Be clearer and more comprehensive
 4. Handle edge cases better
 
-Respond with a JSON object in this exact format:
-{{
-  "optimized_prompt": "Your improved system prompt here",
-  "modification_notes": "Bullet points explaining what you changed and why"
-}}
-
-Only respond with the JSON object, no other text."""
+Provide the optimized prompt and notes explaining your changes."""
 
 
 async def optimize_prompt(
     current_prompt: str,
     test_cases: list[TestCase],
     results: list[EvaluationResult],
-    model: str = "gpt-4o"
+    model: str = "gpt-4o",
 ) -> OptimizeResponse:
     """Optimize the system prompt based on evaluation results."""
 
@@ -54,7 +50,7 @@ async def optimize_prompt(
             "expected": tc.expected_verdict,
             "actual": result.actual_verdict,
             "expected_reasoning": tc.reasoning,
-            "judge_reasoning": result.reasoning
+            "judge_reasoning": result.reasoning,
         }
 
         if result.correct:
@@ -66,29 +62,23 @@ async def optimize_prompt(
     if not failed_cases:
         return OptimizeResponse(
             optimized_prompt=current_prompt,
-            modification_notes="All test cases passed. No optimization needed."
+            modification_notes="All test cases passed. No optimization needed.",
         )
 
     prompt = OPTIMIZATION_PROMPT.format(
         current_prompt=current_prompt,
         failed_cases=json.dumps(failed_cases, indent=2),
-        passed_cases=json.dumps(passed_cases[:5], indent=2)  # Limit passed cases to avoid token limits
+        passed_cases=json.dumps(passed_cases[:5], indent=2),  # Limit passed cases to avoid token limits
     )
 
-    response = await litellm.acompletion(
-        model=model,
+    result = await call_llm(
         messages=[{"role": "user", "content": prompt}],
+        response_model=OptimizedPromptResponse,
+        model=model,
         temperature=0.7,
-        response_format={"type": "json_object"}
     )
 
-    content = response.choices[0].message.content
-
-    try:
-        result = json.loads(content)
-        return OptimizeResponse(
-            optimized_prompt=result["optimized_prompt"],
-            modification_notes=result["modification_notes"]
-        )
-    except (json.JSONDecodeError, KeyError) as e:
-        raise ValueError(f"Failed to parse optimization response: {e}")
+    return OptimizeResponse(
+        optimized_prompt=result.optimized_prompt,
+        modification_notes=result.modification_notes,
+    )

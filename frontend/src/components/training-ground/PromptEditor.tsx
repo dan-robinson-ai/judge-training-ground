@@ -23,6 +23,9 @@ export function PromptEditor() {
     setSystemPrompt,
     selectedModel,
     setSelectedModel,
+    generateCount,
+    setGenerateCount,
+    hasGenerated,
     testCases,
     runStats,
     isGenerating,
@@ -50,27 +53,29 @@ export function PromptEditor() {
         <Label htmlFor="intent" className="text-sm font-medium">
           Judge Intent
         </Label>
-        <div className="flex gap-2">
-          <Input
-            id="intent"
-            placeholder="e.g., Detect toxic messages, Identify spam content..."
-            value={intent}
-            onChange={(e) => setIntent(e.target.value)}
-            className="flex-1 bg-secondary/50 border-border"
-          />
-          <Button
-            onClick={() => generateTestCases(10)}
-            disabled={isGenerating || !intent.trim()}
-            className="shrink-0"
-          >
-            {isGenerating ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="mr-2 h-4 w-4" />
-            )}
-            Generate
-          </Button>
-        </div>
+        <Input
+          id="intent"
+          placeholder="e.g., Detect toxic messages, Identify spam content..."
+          value={intent}
+          onChange={(e) => setIntent(e.target.value)}
+          className="bg-secondary/50 border-border"
+        />
+      </div>
+
+      {/* Number to Generate */}
+      <div className="space-y-2">
+        <Label htmlFor="count" className="text-sm font-medium">
+          Number to Generate
+        </Label>
+        <Input
+          id="count"
+          type="number"
+          min={1}
+          max={100}
+          value={generateCount}
+          onChange={(e) => setGenerateCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 50)))}
+          className="bg-secondary/50 border-border"
+        />
       </div>
 
       {/* Model Selector */}
@@ -97,49 +102,67 @@ export function PromptEditor() {
         </Select>
       </div>
 
-      {/* System Prompt */}
-      <div className="flex flex-1 flex-col space-y-2 min-h-0">
-        <Label htmlFor="prompt" className="text-sm font-medium">
-          System Prompt
-        </Label>
-        <Textarea
-          id="prompt"
-          value={systemPrompt}
-          onChange={(e) => setSystemPrompt(e.target.value)}
-          placeholder="Enter your system prompt for the judge..."
-          className="flex-1 resize-none bg-secondary/50 border-border font-mono text-sm"
-        />
-      </div>
+      {/* Generate Button */}
+      <Button
+        onClick={() => generateTestCases()}
+        disabled={isGenerating || !intent.trim()}
+        className="w-full"
+      >
+        {isGenerating ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Sparkles className="mr-2 h-4 w-4" />
+        )}
+        Generate Test Cases
+      </Button>
 
-      {/* Action Buttons */}
-      <div className="flex gap-2">
-        <Button
-          onClick={runEvaluation}
-          disabled={isRunning || testCases.length === 0}
-          className="flex-1"
-          variant="default"
-        >
-          {isRunning ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Play className="mr-2 h-4 w-4" />
-          )}
-          Run Evaluation
-        </Button>
-        <Button
-          onClick={optimizePrompt}
-          disabled={isOptimizing || !canOptimize}
-          variant="secondary"
-          className="flex-1"
-        >
-          {isOptimizing ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Wand2 className="mr-2 h-4 w-4" />
-          )}
-          Auto-Optimize
-        </Button>
-      </div>
+      {/* System Prompt - Only shown after generation */}
+      {hasGenerated && (
+        <div className="flex flex-1 flex-col space-y-2 min-h-0">
+          <Label htmlFor="prompt" className="text-sm font-medium">
+            System Prompt
+          </Label>
+          <Textarea
+            id="prompt"
+            value={systemPrompt}
+            onChange={(e) => setSystemPrompt(e.target.value)}
+            placeholder="System prompt will be generated..."
+            className="flex-1 resize-none bg-secondary/50 border-border font-mono text-sm"
+          />
+        </div>
+      )}
+
+      {/* Action Buttons - Only shown after generation */}
+      {hasGenerated && (
+        <div className="flex gap-2">
+          <Button
+            onClick={runEvaluation}
+            disabled={isRunning || testCases.length === 0}
+            className="flex-1"
+            variant="default"
+          >
+            {isRunning ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Play className="mr-2 h-4 w-4" />
+            )}
+            Run Evaluation
+          </Button>
+          <Button
+            onClick={optimizePrompt}
+            disabled={isOptimizing || !canOptimize}
+            variant="secondary"
+            className="flex-1"
+          >
+            {isOptimizing ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Wand2 className="mr-2 h-4 w-4" />
+            )}
+            Auto-Optimize
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

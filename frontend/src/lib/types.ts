@@ -24,6 +24,7 @@ export interface RunStats {
 
 export interface GenerateResponse {
   test_cases: TestCase[];
+  system_prompt: string;
 }
 
 export interface OptimizeResponse {
