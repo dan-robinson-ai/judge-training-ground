@@ -1,7 +1,7 @@
 "use client";
 
 import { useTrainingStore } from "@/lib/store";
-import { AVAILABLE_MODELS } from "@/lib/types";
+import { AVAILABLE_MODELS, OPTIMIZER_OPTIONS } from "@/lib/types";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -25,18 +25,18 @@ export function PromptEditor() {
     setSelectedModel,
     generateCount,
     setGenerateCount,
+    optimizerType,
+    setOptimizerType,
     hasGenerated,
     testCases,
     runStats,
     isGenerating,
     isRunning,
     isOptimizing,
-    isSplitting,
     isSplit,
     generateTestCases,
     runEvaluation,
     optimizePrompt,
-    splitDataset,
   } = useTrainingStore();
 
   const canOptimize = runStats && runStats.accuracy < 100;
@@ -135,29 +135,38 @@ export function PromptEditor() {
         </div>
       )}
 
-      {/* Split Dataset Button - Only shown after generation */}
-      {hasGenerated && !isSplit && (
-        <Button
-          onClick={splitDataset}
-          disabled={isSplitting || testCases.length === 0}
-          variant="outline"
-          className="w-full"
-        >
-          {isSplitting ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Split className="mr-2 h-4 w-4" />
-          )}
-          Split Dataset (70/30)
-        </Button>
+      {/* Optimizer Selector - Only shown after generation */}
+      {hasGenerated && (
+        <div className="space-y-2">
+          <Label htmlFor="optimizer" className="text-sm font-medium">
+            Optimizer
+          </Label>
+          <Select value={optimizerType} onValueChange={setOptimizerType}>
+            <SelectTrigger className="bg-secondary/50 border-border">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {OPTIMIZER_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  <div className="flex flex-col">
+                    <span>{opt.label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {opt.description}
+                    </span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       )}
 
-      {/* Split Status */}
+      {/* Split Status - shown after optimization splits the data */}
       {isSplit && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary/50 rounded-md px-3 py-2">
           <Split className="h-4 w-4" />
           <span>
-            Dataset split: {testCases.filter(tc => tc.split === "train").length} train / {testCases.filter(tc => tc.split === "test").length} test
+            Auto-split: {testCases.filter(tc => tc.split === "train").length} train / {testCases.filter(tc => tc.split === "test").length} test
           </span>
         </div>
       )}
@@ -189,7 +198,7 @@ export function PromptEditor() {
             ) : (
               <Wand2 className="mr-2 h-4 w-4" />
             )}
-            Auto-Optimize
+            Optimize
           </Button>
         </div>
       )}

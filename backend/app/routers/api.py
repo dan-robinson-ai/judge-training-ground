@@ -6,12 +6,10 @@ from app.schemas import (
     RunStats,
     OptimizeRequest,
     OptimizeResponse,
-    SplitRequest,
-    SplitResponse,
 )
 from app.services.generator import generate_test_cases
 from app.services.judge import LLMJudge
-from app.services.optimizer import optimize_prompt, split_test_cases
+from app.services.optimizer import optimize_prompt
 from app.services.metrics import calculate_cohen_kappa
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -69,28 +67,21 @@ async def run_endpoint(request: RunRequest) -> RunStats:
 
 @router.post("/optimize", response_model=OptimizeResponse)
 async def optimize_endpoint(request: OptimizeRequest) -> OptimizeResponse:
-    """Optimize the system prompt based on evaluation results."""
+    """Optimize the system prompt using DSPy optimizers.
+
+    This endpoint automatically splits the data if not already split,
+    then uses the specified optimizer to improve the prompt.
+    """
     try:
         result = await optimize_prompt(
             current_prompt=request.current_prompt,
             test_cases=request.test_cases,
-            results=request.results
+            results=request.results,
+            optimizer_type=request.optimizer_type,
+            model=request.model,
         )
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Optimization failed: {str(e)}")
-
-
-@router.post("/split", response_model=SplitResponse)
-async def split_endpoint(request: SplitRequest) -> SplitResponse:
-    """Split test cases into train and test sets for unbiased evaluation."""
-    try:
-        train_cases, test_cases = split_test_cases(
-            test_cases=request.test_cases,
-            train_ratio=request.train_ratio
-        )
-        return SplitResponse(train_cases=train_cases, test_cases=test_cases)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Split failed: {str(e)}")

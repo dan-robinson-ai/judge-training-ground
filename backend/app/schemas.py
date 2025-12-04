@@ -83,17 +83,24 @@ class RunStats(BaseModel):
     results: list[EvaluationResult]
 
 
+OptimizerType = Literal["bootstrap_fewshot", "miprov2", "copro"]
+
+
 class OptimizeRequest(BaseModel):
     """Request to optimize the system prompt."""
     current_prompt: str
     test_cases: list[TestCase]
     results: list[EvaluationResult]
+    optimizer_type: OptimizerType = "bootstrap_fewshot"
+    model: str = Field(default="gpt-4o", description="LiteLLM model name")
 
 
 class OptimizeResponse(BaseModel):
     """Response containing the optimized prompt."""
     optimized_prompt: str
     modification_notes: str
+    train_cases: list[TestCase]
+    test_cases: list[TestCase]
 
 
 class SplitRequest(BaseModel):

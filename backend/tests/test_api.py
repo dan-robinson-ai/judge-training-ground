@@ -1,18 +1,17 @@
 """Tests for API endpoints."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
+
 from app.main import app
 from app.schemas import (
-    TestCase,
-    EvaluationResult,
-    GeneratedTestCaseList,
-    GeneratedTestCase,
     GeneratedSystemPrompt,
+    GeneratedTestCase,
+    GeneratedTestCaseList,
     JudgeVerdict,
-    OptimizedPromptResponse,
 )
 
 
@@ -226,14 +225,20 @@ class TestRunEndpoint:
 class TestOptimizeEndpoint:
     @pytest.mark.asyncio
     async def test_optimize_success(self, async_client):
-        """Test successful prompt optimization."""
-        mock_response = OptimizedPromptResponse(
-            optimized_prompt="Improved prompt",
-            modification_notes="Better edge case handling",
-        )
+        """Test successful prompt optimization with DSPy."""
+        with patch("app.services.optimizer.dspy") as mock_dspy:
+            # Mock DSPy components
+            mock_dspy.LM.return_value = MagicMock()
+            mock_dspy.configure = MagicMock()
+            mock_dspy.Example = MagicMock(return_value=MagicMock())
+            mock_dspy.BootstrapFewShot.return_value = MagicMock()
 
-        with patch("app.services.optimizer.call_llm") as mock_llm:
-            mock_llm.return_value = mock_response
+            # Mock the optimized module
+            optimized = mock_dspy.BootstrapFewShot.return_value.compile.return_value
+            optimized.judge = MagicMock()
+            optimized.judge.signature = MagicMock()
+            optimized.judge.signature.instructions = "Improved prompt"
+            optimized.judge.demos = []
 
             response = await async_client.post(
                 "/api/optimize",
@@ -246,7 +251,14 @@ class TestOptimizeEndpoint:
                             "expected_verdict": "PASS",
                             "reasoning": "Friendly",
                             "verified": True,
-                        }
+                        },
+                        {
+                            "id": "test-2",
+                            "input_text": "Bad",
+                            "expected_verdict": "FAIL",
+                            "reasoning": "Hostile",
+                            "verified": True,
+                        },
                     ],
                     "results": [
                         {
@@ -254,19 +266,132 @@ class TestOptimizeEndpoint:
                             "actual_verdict": "FAIL",
                             "reasoning": "Incorrectly flagged",
                             "correct": False,
-                        }
+                        },
+                        {
+                            "test_case_id": "test-2",
+                            "actual_verdict": "FAIL",
+                            "reasoning": "Correct",
+                            "correct": True,
+                        },
+                    ],
+                    "optimizer_type": "bootstrap_fewshot",
+                    "model": "gpt-4o",
+                },
+            )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert "optimized_prompt" in data
+            assert "modification_notes" in data
+            assert "train_cases" in data
+            assert "test_cases" in data
+            # Auto-split should have occurred
+            assert len(data["train_cases"]) + len(data["test_cases"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_optimize_with_different_optimizer_types(self, async_client):
+        """Test optimization with different optimizer types."""
+        for optimizer_type in ["bootstrap_fewshot", "miprov2", "copro"]:
+            with patch("app.services.optimizer.dspy") as mock_dspy:
+                mock_dspy.LM.return_value = MagicMock()
+                mock_dspy.configure = MagicMock()
+                mock_dspy.Example = MagicMock(return_value=MagicMock())
+
+                # Mock all optimizer types
+                for opt_name in ["BootstrapFewShot", "MIPROv2", "COPRO"]:
+                    mock_opt = MagicMock()
+                    mock_opt.compile.return_value = MagicMock()
+                    mock_opt.compile.return_value.judge = MagicMock()
+                    mock_opt.compile.return_value.judge.signature = MagicMock()
+                    mock_opt.compile.return_value.judge.signature.instructions = "Optimized"
+                    mock_opt.compile.return_value.judge.demos = []
+                    setattr(mock_dspy, opt_name, MagicMock(return_value=mock_opt))
+
+                response = await async_client.post(
+                    "/api/optimize",
+                    json={
+                        "current_prompt": "Original",
+                        "test_cases": [
+                            {
+                                "id": "test-1",
+                                "input_text": "Hello",
+                                "expected_verdict": "PASS",
+                                "reasoning": "Friendly",
+                                "verified": True,
+                            }
+                        ],
+                        "results": [
+                            {
+                                "test_case_id": "test-1",
+                                "actual_verdict": "FAIL",
+                                "reasoning": "Wrong",
+                                "correct": False,
+                            }
+                        ],
+                        "optimizer_type": optimizer_type,
+                    },
+                )
+
+                assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_optimize_preserves_existing_split(self, async_client):
+        """Test that optimization preserves existing train/test split."""
+        with patch("app.services.optimizer.dspy") as mock_dspy:
+            mock_dspy.LM.return_value = MagicMock()
+            mock_dspy.configure = MagicMock()
+            mock_dspy.Example = MagicMock(return_value=MagicMock())
+            mock_dspy.BootstrapFewShot.return_value = MagicMock()
+
+            optimized = mock_dspy.BootstrapFewShot.return_value.compile.return_value
+            optimized.judge = MagicMock()
+            optimized.judge.signature = MagicMock()
+            optimized.judge.signature.instructions = "Optimized"
+            optimized.judge.demos = []
+
+            response = await async_client.post(
+                "/api/optimize",
+                json={
+                    "current_prompt": "Original",
+                    "test_cases": [
+                        {
+                            "id": "train-1",
+                            "input_text": "Train input",
+                            "expected_verdict": "PASS",
+                            "reasoning": "Train reasoning",
+                            "verified": True,
+                            "split": "train",
+                        },
+                        {
+                            "id": "test-1",
+                            "input_text": "Test input",
+                            "expected_verdict": "FAIL",
+                            "reasoning": "Test reasoning",
+                            "verified": True,
+                            "split": "test",
+                        },
+                    ],
+                    "results": [
+                        {
+                            "test_case_id": "train-1",
+                            "actual_verdict": "FAIL",
+                            "reasoning": "Wrong",
+                            "correct": False,
+                        },
                     ],
                 },
             )
 
             assert response.status_code == 200
             data = response.json()
-            assert data["optimized_prompt"] == "Improved prompt"
-            assert data["modification_notes"] == "Better edge case handling"
+            assert len(data["train_cases"]) == 1
+            assert len(data["test_cases"]) == 1
+            assert data["train_cases"][0]["id"] == "train-1"
+            assert data["test_cases"][0]["id"] == "test-1"
 
     @pytest.mark.asyncio
-    async def test_optimize_no_failures(self, async_client):
-        """Test optimization when all tests pass."""
+    async def test_optimize_no_train_cases_returns_original(self, async_client):
+        """Test optimization returns original prompt when no training data."""
         response = await async_client.post(
             "/api/optimize",
             json={
@@ -278,20 +403,14 @@ class TestOptimizeEndpoint:
                         "expected_verdict": "PASS",
                         "reasoning": "Friendly",
                         "verified": True,
+                        "split": "test",  # All test, no train
                     }
                 ],
-                "results": [
-                    {
-                        "test_case_id": "test-1",
-                        "actual_verdict": "PASS",
-                        "reasoning": "Correct",
-                        "correct": True,
-                    }
-                ],
+                "results": [],
             },
         )
 
         assert response.status_code == 200
         data = response.json()
         assert data["optimized_prompt"] == "Original prompt"
-        assert "No optimization needed" in data["modification_notes"]
+        assert "No training cases" in data["modification_notes"]

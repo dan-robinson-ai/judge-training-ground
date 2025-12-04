@@ -38,11 +38,11 @@ describe("TrainingStore", () => {
       runStats: null,
       selectedModel: "gpt-4o",
       generateCount: 50,
+      optimizerType: "bootstrap_fewshot",
       hasGenerated: false,
       isGenerating: false,
       isRunning: false,
       isOptimizing: false,
-      isSplitting: false,
       isSplit: false,
       error: null,
       activeTab: "dataset",
@@ -257,24 +257,26 @@ describe("TrainingStore", () => {
       });
 
       it("should optimize prompt successfully", async () => {
+        const testCase = {
+          id: "test-1",
+          input_text: "Hello",
+          expected_verdict: "PASS" as const,
+          reasoning: "Friendly",
+          verified: false,
+        };
+
         const mockOptimizeResponse = {
           optimized_prompt: "Improved prompt",
           modification_notes: "Better handling",
+          train_cases: [{ ...testCase, split: "train" as const }],
+          test_cases: [],
         };
 
         vi.mocked(api.optimizePrompt).mockResolvedValue(mockOptimizeResponse);
 
         useTrainingStore.setState({
           systemPrompt: "Original prompt",
-          testCases: [
-            {
-              id: "test-1",
-              input_text: "Hello",
-              expected_verdict: "PASS",
-              reasoning: "Friendly",
-              verified: false,
-            },
-          ],
+          testCases: [testCase],
           runStats: {
             total: 1,
             passed: 0,
@@ -297,6 +299,7 @@ describe("TrainingStore", () => {
 
         expect(useTrainingStore.getState().systemPrompt).toBe("Improved prompt");
         expect(useTrainingStore.getState().isOptimizing).toBe(false);
+        expect(useTrainingStore.getState().isSplit).toBe(true);
       });
     });
   });

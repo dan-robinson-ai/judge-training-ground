@@ -1,4 +1,4 @@
-import { TestCase, EvaluationResult, GenerateResponse, RunStats, OptimizeResponse, SplitResponse } from "./types";
+import { TestCase, EvaluationResult, GenerateResponse, RunStats, OptimizeResponse, OptimizerType } from "./types";
 
 const API_BASE = "http://localhost:8000";
 
@@ -52,7 +52,9 @@ class ApiClient {
   async optimizePrompt(
     currentPrompt: string,
     testCases: TestCase[],
-    results: EvaluationResult[]
+    results: EvaluationResult[],
+    optimizerType: OptimizerType = "bootstrap_fewshot",
+    model: string = "gpt-4o"
   ): Promise<OptimizeResponse> {
     return this.request<OptimizeResponse>("/api/optimize", {
       method: "POST",
@@ -60,19 +62,8 @@ class ApiClient {
         current_prompt: currentPrompt,
         test_cases: testCases,
         results: results,
-      }),
-    });
-  }
-
-  async splitDataset(
-    testCases: TestCase[],
-    trainRatio: number = 0.7
-  ): Promise<SplitResponse> {
-    return this.request<SplitResponse>("/api/split", {
-      method: "POST",
-      body: JSON.stringify({
-        test_cases: testCases,
-        train_ratio: trainRatio,
+        optimizer_type: optimizerType,
+        model: model,
       }),
     });
   }

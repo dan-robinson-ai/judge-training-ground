@@ -1,19 +1,21 @@
-"""Tests for service modules."""
+"""Tests for service modules (generator and judge).
+
+Note: Optimizer tests are in test_optimizer.py
+"""
+
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch, AsyncMock
+
 from app.schemas import (
-    TestCase,
-    EvaluationResult,
-    GeneratedTestCaseList,
-    GeneratedTestCase,
     GeneratedSystemPrompt,
+    GeneratedTestCase,
+    GeneratedTestCaseList,
     JudgeVerdict,
-    OptimizedPromptResponse,
+    TestCase,
 )
 from app.services.generator import generate_test_cases
 from app.services.judge import LLMJudge
-from app.services.optimizer import optimize_prompt
 
 
 class TestGenerateTestCases:
@@ -171,60 +173,3 @@ class TestLLMJudge:
             assert results[1].actual_verdict == "FAIL"
 
 
-class TestOptimizePrompt:
-    @pytest.mark.asyncio
-    async def test_optimize_prompt_with_failures(
-        self, sample_test_cases, sample_evaluation_results
-    ):
-        """Test prompt optimization when there are failures."""
-        mock_response = OptimizedPromptResponse(
-            optimized_prompt="Improved system prompt with better edge case handling",
-            modification_notes="- Added specific rules for edge cases",
-        )
-
-        with patch("app.services.optimizer.call_llm") as mock_llm:
-            mock_llm.return_value = mock_response
-
-            result = await optimize_prompt(
-                current_prompt="Original prompt",
-                test_cases=sample_test_cases,
-                results=sample_evaluation_results,
-            )
-
-            assert result.optimized_prompt == "Improved system prompt with better edge case handling"
-            assert "edge cases" in result.modification_notes
-
-    @pytest.mark.asyncio
-    async def test_optimize_prompt_all_passed(self, sample_test_cases):
-        """Test optimization when all tests pass."""
-        all_passed_results = [
-            EvaluationResult(
-                test_case_id=tc.id,
-                actual_verdict=tc.expected_verdict,
-                reasoning="Correct",
-                correct=True,
-            )
-            for tc in sample_test_cases
-        ]
-
-        result = await optimize_prompt(
-            current_prompt="Current prompt",
-            test_cases=sample_test_cases,
-            results=all_passed_results,
-        )
-
-        assert result.optimized_prompt == "Current prompt"
-        assert "No optimization needed" in result.modification_notes
-
-    @pytest.mark.asyncio
-    async def test_optimize_prompt_llm_error(self, sample_test_cases, sample_evaluation_results):
-        """Test handling of LLM errors during optimization."""
-        with patch("app.services.optimizer.call_llm") as mock_llm:
-            mock_llm.side_effect = ValueError("LLM error")
-
-            with pytest.raises(ValueError, match="LLM error"):
-                await optimize_prompt(
-                    current_prompt="Original",
-                    test_cases=sample_test_cases,
-                    results=sample_evaluation_results,
-                )

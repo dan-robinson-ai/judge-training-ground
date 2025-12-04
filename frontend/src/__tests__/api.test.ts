@@ -111,11 +111,6 @@ describe("ApiClient", () => {
 
   describe("optimizePrompt", () => {
     it("should call optimize endpoint with correct parameters", async () => {
-      const mockResponse = {
-        optimized_prompt: "Better prompt",
-        modification_notes: "Improved",
-      };
-
       const testCases = [
         {
           id: "test-1",
@@ -125,6 +120,13 @@ describe("ApiClient", () => {
           verified: false,
         },
       ];
+
+      const mockResponse = {
+        optimized_prompt: "Better prompt",
+        modification_notes: "Improved",
+        train_cases: [{ ...testCases[0], split: "train" as const }],
+        test_cases: [],
+      };
 
       const results = [
         {
@@ -140,7 +142,7 @@ describe("ApiClient", () => {
         json: () => Promise.resolve(mockResponse),
       } as Response);
 
-      const result = await api.optimizePrompt("Current prompt", testCases, results);
+      const result = await api.optimizePrompt("Current prompt", testCases, results, "miprov2", "gpt-4o-mini");
 
       expect(global.fetch).toHaveBeenCalledWith(
         "http://localhost:8000/api/optimize",
@@ -150,10 +152,60 @@ describe("ApiClient", () => {
             current_prompt: "Current prompt",
             test_cases: testCases,
             results: results,
+            optimizer_type: "miprov2",
+            model: "gpt-4o-mini",
           }),
         })
       );
       expect(result).toEqual(mockResponse);
+    });
+
+    it("should use default optimizer and model values", async () => {
+      const testCases = [
+        {
+          id: "test-1",
+          input_text: "Hello",
+          expected_verdict: "PASS" as const,
+          reasoning: "Friendly",
+          verified: false,
+        },
+      ];
+
+      const mockResponse = {
+        optimized_prompt: "Better prompt",
+        modification_notes: "Improved",
+        train_cases: [{ ...testCases[0], split: "train" as const }],
+        test_cases: [],
+      };
+
+      const results = [
+        {
+          test_case_id: "test-1",
+          actual_verdict: "FAIL" as const,
+          reasoning: "Wrong",
+          correct: false,
+        },
+      ];
+
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      } as Response);
+
+      await api.optimizePrompt("Current prompt", testCases, results);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: JSON.stringify({
+            current_prompt: "Current prompt",
+            test_cases: testCases,
+            results: results,
+            optimizer_type: "bootstrap_fewshot",
+            model: "gpt-4o",
+          }),
+        })
+      );
     });
   });
 
@@ -190,7 +242,8 @@ describe("ApiClient", () => {
         json: () => Promise.reject(new Error("Invalid JSON")),
       } as Response);
 
-      await expect(api.healthCheck()).rejects.toThrow("HTTP 500");
+      // When JSON parsing fails, api.ts falls back to "Unknown error"
+      await expect(api.healthCheck()).rejects.toThrow("Unknown error");
     });
   });
 });

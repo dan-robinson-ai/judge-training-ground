@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { TestCase, RunStats, Judge, JudgeListItem } from "./types";
+import { TestCase, RunStats, Judge, JudgeListItem, OptimizerType } from "./types";
 import { api } from "./api";
 import { storage } from "./persistence";
 
@@ -31,11 +31,11 @@ interface TrainingStore {
   runStats: RunStats | null;
   selectedModel: string;
   generateCount: number;
+  optimizerType: OptimizerType;
   hasGenerated: boolean;
   isGenerating: boolean;
   isRunning: boolean;
   isOptimizing: boolean;
-  isSplitting: boolean;
   isSplit: boolean;
   error: string | null;
   activeTab: "dataset" | "results";
@@ -55,6 +55,7 @@ interface TrainingStore {
   setSystemPrompt: (prompt: string) => void;
   setSelectedModel: (model: string) => void;
   setGenerateCount: (count: number) => void;
+  setOptimizerType: (optimizerType: OptimizerType) => void;
   setActiveTab: (tab: "dataset" | "results") => void;
   clearError: () => void;
 
@@ -67,7 +68,6 @@ interface TrainingStore {
   generateTestCases: () => Promise<void>;
   runEvaluation: () => Promise<void>;
   optimizePrompt: () => Promise<void>;
-  splitDataset: () => Promise<void>;
 }
 
 // Helper to build a Judge object from current state
@@ -136,11 +136,11 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
   runStats: null,
   selectedModel: "gpt-4o",
   generateCount: 50,
+  optimizerType: "bootstrap_fewshot" as OptimizerType,
   hasGenerated: false,
   isGenerating: false,
   isRunning: false,
   isOptimizing: false,
-  isSplitting: false,
   isSplit: false,
   error: null,
   activeTab: "dataset",
@@ -312,6 +312,9 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
     set({ generateCount });
     debouncedPersist(get);
   },
+  setOptimizerType: (optimizerType) => {
+    set({ optimizerType });
+  },
   setActiveTab: (activeTab) => set({ activeTab }),
   clearError: () => set({ error: null }),
 
@@ -392,7 +395,7 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
   },
 
   optimizePrompt: async () => {
-    const { systemPrompt, testCases, runStats } = get();
+    const { systemPrompt, testCases, runStats, optimizerType, selectedModel } = get();
     if (!runStats) {
       set({ error: "Run an evaluation first" });
       return;
@@ -403,10 +406,15 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
       const result = await api.optimizePrompt(
         systemPrompt,
         testCases,
-        runStats.results
+        runStats.results,
+        optimizerType,
+        selectedModel
       );
+      // Update test cases with the split data from the optimization
       set({
         systemPrompt: result.optimized_prompt,
+        testCases: [...result.train_cases, ...result.test_cases],
+        isSplit: true,
         isOptimizing: false,
       });
       debouncedPersist(get);
@@ -414,34 +422,6 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
       set({
         error: error instanceof Error ? error.message : "Optimization failed",
         isOptimizing: false,
-      });
-    }
-  },
-
-  splitDataset: async () => {
-    const { testCases, isSplit } = get();
-    if (testCases.length === 0) {
-      set({ error: "No test cases to split" });
-      return;
-    }
-    if (isSplit) {
-      set({ error: "Dataset is already split" });
-      return;
-    }
-
-    set({ isSplitting: true, error: null });
-    try {
-      const response = await api.splitDataset(testCases);
-      set({
-        testCases: [...response.train_cases, ...response.test_cases],
-        isSplit: true,
-        isSplitting: false,
-      });
-      debouncedPersist(get);
-    } catch (error) {
-      set({
-        error: error instanceof Error ? error.message : "Split failed",
-        isSplitting: false,
       });
     }
   },

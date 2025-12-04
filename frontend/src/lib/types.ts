@@ -32,7 +32,23 @@ export interface GenerateResponse {
 export interface OptimizeResponse {
   optimized_prompt: string;
   modification_notes: string;
+  train_cases: TestCase[];
+  test_cases: TestCase[];
 }
+
+export type OptimizerType = "bootstrap_fewshot" | "miprov2" | "copro";
+
+export type OptimizerOption = {
+  value: OptimizerType;
+  label: string;
+  description: string;
+};
+
+export const OPTIMIZER_OPTIONS: OptimizerOption[] = [
+  { value: "bootstrap_fewshot", label: "BootstrapFewShot", description: "Adds fewshot examples to improve accuracy" },
+  { value: "miprov2", label: "MIPROv2", description: "Bayesian optimization for prompts" },
+  { value: "copro", label: "COPRO", description: "Cooperative prompt optimization" },
+];
 
 export type ModelOption = {
   value: string;
@@ -46,11 +62,6 @@ export const AVAILABLE_MODELS: ModelOption[] = [
   { value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet", provider: "Anthropic" },
   { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku", provider: "Anthropic" },
 ];
-
-export interface SplitResponse {
-  train_cases: TestCase[];
-  test_cases: TestCase[];
-}
 
 // Multi-judge support types
 export interface Judge {
