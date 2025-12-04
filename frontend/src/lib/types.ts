@@ -63,7 +63,7 @@ export const AVAILABLE_MODELS: ModelOption[] = [
   { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku", provider: "Anthropic" },
 ];
 
-// Multi-judge support types
+// Legacy types - kept for migration
 export interface Judge {
   id: string;
   name: string;
@@ -86,4 +86,50 @@ export interface JudgeListItem {
   updatedAt: string;
   testCaseCount: number;
   accuracy: number | null;
+}
+
+// New dataset-centric types with prompt versioning
+
+export interface PromptVersion {
+  id: string;
+  version: number;
+  systemPrompt: string;
+  source: "manual" | "generated" | "optimized";
+  createdAt: string;
+  parentVersionId: string | null;
+  notes?: string;
+  optimizerType?: OptimizerType;
+}
+
+export interface Run {
+  id: string;
+  promptVersionId: string;
+  modelName: string;
+  createdAt: string;
+  stats: RunStats;
+}
+
+export interface Dataset {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  intent: string;
+  testCases: TestCase[];
+  promptVersions: PromptVersion[];
+  runs: Run[];
+  activePromptVersionId: string | null;
+  generateCount: number;
+  hasGenerated: boolean;
+  isSplit: boolean;
+}
+
+export interface DatasetListItem {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  testCaseCount: number;
+  promptVersionCount: number;
+  bestAccuracy: number | null;
 }

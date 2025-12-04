@@ -1,5 +1,13 @@
 import { create } from "zustand";
-import { TestCase, RunStats, Judge, JudgeListItem, OptimizerType } from "./types";
+import {
+  TestCase,
+  RunStats,
+  Dataset,
+  DatasetListItem,
+  PromptVersion,
+  Run,
+  OptimizerType,
+} from "./types";
 import { api } from "./api";
 import { storage } from "./persistence";
 
@@ -19,44 +27,56 @@ interface TrainingStore {
   // App-level UI state
   sidebarCollapsed: boolean;
 
-  // Judge collection state
-  judges: JudgeListItem[];
-  activeJudgeId: string | null;
-  isLoadingJudges: boolean;
+  // Dataset collection state
+  datasets: DatasetListItem[];
+  activeDatasetId: string | null;
+  isLoadingDatasets: boolean;
 
-  // Active judge state
+  // Active dataset state (flattened for convenience)
   intent: string;
-  systemPrompt: string;
   testCases: TestCase[];
-  runStats: RunStats | null;
+  promptVersions: PromptVersion[];
+  runs: Run[];
+  activePromptVersionId: string | null;
+
+  // Current editing state
+  currentSystemPrompt: string;
   selectedModel: string;
   generateCount: number;
   optimizerType: OptimizerType;
+
+  // Flags
   hasGenerated: boolean;
   isGenerating: boolean;
   isRunning: boolean;
   isOptimizing: boolean;
   isSplit: boolean;
   error: string | null;
-  activeTab: "dataset" | "results";
+
+  // UI state
+  activeTab: "dataset" | "versions" | "history";
 
   // UI Actions
   toggleSidebar: () => void;
+  setActiveTab: (tab: "dataset" | "versions" | "history") => void;
 
-  // Judge management actions
-  loadJudges: () => Promise<void>;
-  selectJudge: (id: string) => Promise<void>;
-  createJudge: (name?: string) => Promise<string>;
-  deleteJudge: (id: string) => Promise<void>;
-  renameJudge: (id: string, newName: string) => Promise<void>;
+  // Dataset management
+  loadDatasets: () => Promise<void>;
+  selectDataset: (id: string) => Promise<void>;
+  createDataset: (name?: string) => Promise<string>;
+  deleteDataset: (id: string) => Promise<void>;
+  renameDataset: (id: string, newName: string) => Promise<void>;
+
+  // Prompt version management
+  selectPromptVersion: (versionId: string) => void;
+  savePromptVersion: (notes?: string) => Promise<void>;
 
   // State setters
   setIntent: (intent: string) => void;
-  setSystemPrompt: (prompt: string) => void;
+  setCurrentSystemPrompt: (prompt: string) => void;
   setSelectedModel: (model: string) => void;
   setGenerateCount: (count: number) => void;
   setOptimizerType: (optimizerType: OptimizerType) => void;
-  setActiveTab: (tab: "dataset" | "results") => void;
   clearError: () => void;
 
   // Test case mutations
@@ -70,18 +90,29 @@ interface TrainingStore {
   optimizePrompt: () => Promise<void>;
 }
 
-// Helper to build a Judge object from current state
-function buildJudgeFromState(state: TrainingStore, id: string, name: string, createdAt: string): Judge {
+// Helper to get next version number
+function getNextVersionNumber(versions: PromptVersion[]): number {
+  if (versions.length === 0) return 1;
+  return Math.max(...versions.map((v) => v.version)) + 1;
+}
+
+// Helper to build a Dataset object from current state
+function buildDatasetFromState(
+  state: TrainingStore,
+  id: string,
+  name: string,
+  createdAt: string
+): Dataset {
   return {
     id,
     name,
     createdAt,
     updatedAt: new Date().toISOString(),
     intent: state.intent,
-    systemPrompt: state.systemPrompt,
     testCases: state.testCases,
-    runStats: state.runStats,
-    selectedModel: state.selectedModel,
+    promptVersions: state.promptVersions,
+    runs: state.runs,
+    activePromptVersionId: state.activePromptVersionId,
     generateCount: state.generateCount,
     hasGenerated: state.hasGenerated,
     isSplit: state.isSplit,
@@ -91,49 +122,59 @@ function buildJudgeFromState(state: TrainingStore, id: string, name: string, cre
 // Create debounced persist function
 const debouncedPersist = debounce(async (get: () => TrainingStore) => {
   const state = get();
-  if (!state.activeJudgeId) return;
+  if (!state.activeDatasetId) return;
 
-  const currentJudge = state.judges.find((j) => j.id === state.activeJudgeId);
-  if (!currentJudge) return;
+  const currentDataset = state.datasets.find(
+    (d) => d.id === state.activeDatasetId
+  );
+  if (!currentDataset) return;
 
-  const judge = buildJudgeFromState(
+  const dataset = buildDatasetFromState(
     state,
-    state.activeJudgeId,
-    currentJudge.name,
-    currentJudge.createdAt
+    state.activeDatasetId,
+    currentDataset.name,
+    currentDataset.createdAt
   );
 
-  await storage.saveJudge(judge);
+  await storage.saveDataset(dataset);
 
-  // Update judges list with new metadata
-  const updatedJudges = state.judges.map((j) =>
-    j.id === state.activeJudgeId
+  // Update datasets list with new metadata
+  const bestAccuracy =
+    dataset.runs.length > 0
+      ? Math.max(...dataset.runs.map((r) => r.stats.accuracy))
+      : null;
+
+  const updatedDatasets = state.datasets.map((d) =>
+    d.id === state.activeDatasetId
       ? {
-          ...j,
-          updatedAt: judge.updatedAt,
-          testCaseCount: judge.testCases.length,
-          accuracy: judge.runStats?.accuracy ?? null,
+          ...d,
+          updatedAt: dataset.updatedAt,
+          testCaseCount: dataset.testCases.length,
+          promptVersionCount: dataset.promptVersions.length,
+          bestAccuracy,
         }
-      : j
+      : d
   );
 
-  // Only update if we're still on the same judge
-  if (get().activeJudgeId === state.activeJudgeId) {
-    useTrainingStore.setState({ judges: updatedJudges });
+  // Only update if we're still on the same dataset
+  if (get().activeDatasetId === state.activeDatasetId) {
+    useTrainingStore.setState({ datasets: updatedDatasets });
   }
 }, 500);
 
 export const useTrainingStore = create<TrainingStore>((set, get) => ({
   // Initial state
   sidebarCollapsed: false,
-  judges: [],
-  activeJudgeId: null,
-  isLoadingJudges: false,
+  datasets: [],
+  activeDatasetId: null,
+  isLoadingDatasets: false,
 
   intent: "",
-  systemPrompt: "",
   testCases: [],
-  runStats: null,
+  promptVersions: [],
+  runs: [],
+  activePromptVersionId: null,
+  currentSystemPrompt: "",
   selectedModel: "gpt-4o",
   generateCount: 50,
   optimizerType: "bootstrap_fewshot" as OptimizerType,
@@ -146,133 +187,147 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
   activeTab: "dataset",
 
   // UI Actions
-  toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  toggleSidebar: () =>
+    set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  setActiveTab: (activeTab) => set({ activeTab }),
 
-  // Judge management actions
-  loadJudges: async () => {
-    set({ isLoadingJudges: true });
+  // Dataset management actions
+  loadDatasets: async () => {
+    set({ isLoadingDatasets: true });
     try {
-      const judges = await storage.getAllJudges();
+      const datasets = await storage.getAllDatasets();
 
-      if (judges.length > 0) {
+      if (datasets.length > 0) {
         // Sort by updatedAt descending and select most recent
-        const sorted = [...judges].sort(
-          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        const sorted = [...datasets].sort(
+          (a, b) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         );
-        set({ judges: sorted, isLoadingJudges: false });
+        set({ datasets: sorted, isLoadingDatasets: false });
 
-        // Auto-select most recently updated judge
-        await get().selectJudge(sorted[0].id);
+        // Auto-select most recently updated dataset
+        await get().selectDataset(sorted[0].id);
       } else {
-        set({ judges: [], isLoadingJudges: false });
+        set({ datasets: [], isLoadingDatasets: false });
       }
     } catch (error) {
       set({
-        error: error instanceof Error ? error.message : "Failed to load judges",
-        isLoadingJudges: false,
+        error:
+          error instanceof Error ? error.message : "Failed to load datasets",
+        isLoadingDatasets: false,
       });
     }
   },
 
-  selectJudge: async (id: string) => {
+  selectDataset: async (id: string) => {
     const state = get();
 
-    // Save current judge first if there is one
-    if (state.activeJudgeId) {
-      const currentJudge = state.judges.find((j) => j.id === state.activeJudgeId);
-      if (currentJudge) {
-        const judge = buildJudgeFromState(
+    // Save current dataset first if there is one
+    if (state.activeDatasetId) {
+      const currentDataset = state.datasets.find(
+        (d) => d.id === state.activeDatasetId
+      );
+      if (currentDataset) {
+        const dataset = buildDatasetFromState(
           state,
-          state.activeJudgeId,
-          currentJudge.name,
-          currentJudge.createdAt
+          state.activeDatasetId,
+          currentDataset.name,
+          currentDataset.createdAt
         );
-        await storage.saveJudge(judge);
+        await storage.saveDataset(dataset);
       }
     }
 
-    // Load new judge
-    const judge = await storage.getJudge(id);
-    if (judge) {
+    // Load new dataset
+    const dataset = await storage.getDataset(id);
+    if (dataset) {
+      // Find active prompt version
+      const activeVersion = dataset.promptVersions.find(
+        (v) => v.id === dataset.activePromptVersionId
+      );
+
       set({
-        activeJudgeId: id,
-        intent: judge.intent,
-        systemPrompt: judge.systemPrompt,
-        testCases: judge.testCases,
-        runStats: judge.runStats,
-        selectedModel: judge.selectedModel,
-        generateCount: judge.generateCount,
-        hasGenerated: judge.hasGenerated,
-        isSplit: judge.isSplit,
+        activeDatasetId: id,
+        intent: dataset.intent,
+        testCases: dataset.testCases,
+        promptVersions: dataset.promptVersions,
+        runs: dataset.runs,
+        activePromptVersionId: dataset.activePromptVersionId,
+        currentSystemPrompt: activeVersion?.systemPrompt ?? "",
+        generateCount: dataset.generateCount,
+        hasGenerated: dataset.hasGenerated,
+        isSplit: dataset.isSplit,
         error: null,
         activeTab: "dataset",
       });
     }
   },
 
-  createJudge: async (name?: string) => {
+  createDataset: async (name?: string) => {
     const state = get();
-    const judgeName = name || `Judge ${state.judges.length + 1}`;
+    const datasetName = name || `Dataset ${state.datasets.length + 1}`;
     const now = new Date().toISOString();
     const id = crypto.randomUUID();
 
-    const newJudge: Judge = {
+    const newDataset: Dataset = {
       id,
-      name: judgeName,
+      name: datasetName,
       createdAt: now,
       updatedAt: now,
       intent: "",
-      systemPrompt: "",
       testCases: [],
-      runStats: null,
-      selectedModel: "gpt-4o",
+      promptVersions: [],
+      runs: [],
+      activePromptVersionId: null,
       generateCount: 50,
       hasGenerated: false,
       isSplit: false,
     };
 
-    await storage.saveJudge(newJudge);
+    await storage.saveDataset(newDataset);
 
-    const listItem: JudgeListItem = {
+    const listItem: DatasetListItem = {
       id,
-      name: judgeName,
+      name: datasetName,
       createdAt: now,
       updatedAt: now,
       testCaseCount: 0,
-      accuracy: null,
+      promptVersionCount: 0,
+      bestAccuracy: null,
     };
 
     set((state) => ({
-      judges: [listItem, ...state.judges],
+      datasets: [listItem, ...state.datasets],
     }));
 
-    // Select the new judge
-    await get().selectJudge(id);
+    // Select the new dataset
+    await get().selectDataset(id);
 
     return id;
   },
 
-  deleteJudge: async (id: string) => {
-    await storage.deleteJudge(id);
+  deleteDataset: async (id: string) => {
+    await storage.deleteDataset(id);
 
     const state = get();
-    const updatedJudges = state.judges.filter((j) => j.id !== id);
+    const updatedDatasets = state.datasets.filter((d) => d.id !== id);
 
-    set({ judges: updatedJudges });
+    set({ datasets: updatedDatasets });
 
-    // If we deleted the active judge, select another one
-    if (state.activeJudgeId === id) {
-      if (updatedJudges.length > 0) {
-        await get().selectJudge(updatedJudges[0].id);
+    // If we deleted the active dataset, select another one
+    if (state.activeDatasetId === id) {
+      if (updatedDatasets.length > 0) {
+        await get().selectDataset(updatedDatasets[0].id);
       } else {
-        // No judges left, reset state
+        // No datasets left, reset state
         set({
-          activeJudgeId: null,
+          activeDatasetId: null,
           intent: "",
-          systemPrompt: "",
           testCases: [],
-          runStats: null,
-          selectedModel: "gpt-4o",
+          promptVersions: [],
+          runs: [],
+          activePromptVersionId: null,
+          currentSystemPrompt: "",
           generateCount: 50,
           hasGenerated: false,
           isSplit: false,
@@ -281,18 +336,52 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
     }
   },
 
-  renameJudge: async (id: string, newName: string) => {
-    const judge = await storage.getJudge(id);
-    if (judge) {
-      judge.name = newName;
-      await storage.saveJudge(judge);
+  renameDataset: async (id: string, newName: string) => {
+    const dataset = await storage.getDataset(id);
+    if (dataset) {
+      dataset.name = newName;
+      await storage.saveDataset(dataset);
 
       set((state) => ({
-        judges: state.judges.map((j) =>
-          j.id === id ? { ...j, name: newName } : j
+        datasets: state.datasets.map((d) =>
+          d.id === id ? { ...d, name: newName } : d
         ),
       }));
     }
+  },
+
+  // Prompt version management
+  selectPromptVersion: (versionId: string) => {
+    const state = get();
+    const version = state.promptVersions.find((v) => v.id === versionId);
+    if (version) {
+      set({
+        activePromptVersionId: versionId,
+        currentSystemPrompt: version.systemPrompt,
+      });
+      debouncedPersist(get);
+    }
+  },
+
+  savePromptVersion: async (notes?: string) => {
+    const state = get();
+    if (!state.currentSystemPrompt.trim()) return;
+
+    const newVersion: PromptVersion = {
+      id: crypto.randomUUID(),
+      version: getNextVersionNumber(state.promptVersions),
+      systemPrompt: state.currentSystemPrompt,
+      source: "manual",
+      createdAt: new Date().toISOString(),
+      parentVersionId: state.activePromptVersionId,
+      notes,
+    };
+
+    set({
+      promptVersions: [...state.promptVersions, newVersion],
+      activePromptVersionId: newVersion.id,
+    });
+    debouncedPersist(get);
   },
 
   // Simple setters (with auto-persist)
@@ -300,8 +389,8 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
     set({ intent });
     debouncedPersist(get);
   },
-  setSystemPrompt: (systemPrompt) => {
-    set({ systemPrompt });
+  setCurrentSystemPrompt: (currentSystemPrompt) => {
+    set({ currentSystemPrompt });
     debouncedPersist(get);
   },
   setSelectedModel: (selectedModel) => {
@@ -315,7 +404,6 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
   setOptimizerType: (optimizerType) => {
     set({ optimizerType });
   },
-  setActiveTab: (activeTab) => set({ activeTab }),
   clearError: () => set({ error: null }),
 
   // Test case mutations (with auto-persist)
@@ -352,14 +440,32 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
 
     set({ isGenerating: true, error: null });
     try {
-      const response = await api.generateTestCases(intent, generateCount, selectedModel);
+      const response = await api.generateTestCases(
+        intent,
+        generateCount,
+        selectedModel
+      );
+
+      // Create new prompt version from generated prompt
+      const state = get();
+      const newVersion: PromptVersion = {
+        id: crypto.randomUUID(),
+        version: getNextVersionNumber(state.promptVersions),
+        systemPrompt: response.system_prompt,
+        source: "generated",
+        createdAt: new Date().toISOString(),
+        parentVersionId: null,
+      };
+
       set({
         testCases: response.test_cases,
-        systemPrompt: response.system_prompt,
+        promptVersions: [...state.promptVersions, newVersion],
+        activePromptVersionId: newVersion.id,
+        currentSystemPrompt: response.system_prompt,
         hasGenerated: true,
         isGenerating: false,
         isSplit: false,
-        runStats: null,
+        runs: [], // Clear runs when regenerating
       });
       debouncedPersist(get);
     } catch (error) {
@@ -371,20 +477,41 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
   },
 
   runEvaluation: async () => {
-    const { systemPrompt, testCases, selectedModel } = get();
+    const state = get();
+    const { currentSystemPrompt, testCases, selectedModel, activePromptVersionId } = state;
+
     if (testCases.length === 0) {
       set({ error: "No test cases to evaluate" });
       return;
     }
 
+    if (!activePromptVersionId) {
+      set({ error: "No prompt version selected" });
+      return;
+    }
+
     set({ isRunning: true, error: null });
     try {
-      const runStats = await api.runEvaluation(
-        systemPrompt,
+      const runStats: RunStats = await api.runEvaluation(
+        currentSystemPrompt,
         testCases,
         selectedModel
       );
-      set({ runStats, isRunning: false, activeTab: "results" });
+
+      // Create new run entry
+      const newRun: Run = {
+        id: crypto.randomUUID(),
+        promptVersionId: activePromptVersionId,
+        modelName: selectedModel,
+        createdAt: new Date().toISOString(),
+        stats: runStats,
+      };
+
+      set({
+        runs: [...state.runs, newRun],
+        isRunning: false,
+        activeTab: "history",
+      });
       debouncedPersist(get);
     } catch (error) {
       set({
@@ -395,27 +522,57 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
   },
 
   optimizePrompt: async () => {
-    const { systemPrompt, testCases, runStats, optimizerType, selectedModel } = get();
-    if (!runStats) {
+    const state = get();
+    const {
+      currentSystemPrompt,
+      testCases,
+      runs,
+      activePromptVersionId,
+      optimizerType,
+      selectedModel,
+    } = state;
+
+    // Find the most recent run for current version
+    const relevantRuns = runs.filter(
+      (r) => r.promptVersionId === activePromptVersionId
+    );
+    if (relevantRuns.length === 0) {
       set({ error: "Run an evaluation first" });
       return;
     }
 
+    const lastRun = relevantRuns[relevantRuns.length - 1];
+
     set({ isOptimizing: true, error: null });
     try {
       const result = await api.optimizePrompt(
-        systemPrompt,
+        currentSystemPrompt,
         testCases,
-        runStats.results,
+        lastRun.stats.results,
         optimizerType,
         selectedModel
       );
-      // Update test cases with the split data from the optimization
-      set({
+
+      // Create new version from optimization
+      const newVersion: PromptVersion = {
+        id: crypto.randomUUID(),
+        version: getNextVersionNumber(state.promptVersions),
         systemPrompt: result.optimized_prompt,
+        source: "optimized",
+        createdAt: new Date().toISOString(),
+        parentVersionId: activePromptVersionId,
+        notes: result.modification_notes,
+        optimizerType,
+      };
+
+      set({
+        promptVersions: [...state.promptVersions, newVersion],
+        activePromptVersionId: newVersion.id,
+        currentSystemPrompt: result.optimized_prompt,
         testCases: [...result.train_cases, ...result.test_cases],
         isSplit: true,
         isOptimizing: false,
+        activeTab: "versions",
       });
       debouncedPersist(get);
     } catch (error) {

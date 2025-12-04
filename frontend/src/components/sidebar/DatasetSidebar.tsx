@@ -4,31 +4,31 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { JudgeListItemComponent } from "./JudgeListItem";
-import { CreateJudgeDialog } from "./CreateJudgeDialog";
+import { DatasetListItemComponent } from "./DatasetListItem";
+import { CreateDatasetDialog } from "./CreateDatasetDialog";
 import { useTrainingStore } from "@/lib/store";
 
-export function JudgeSidebar() {
+export function DatasetSidebar() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   const {
     sidebarCollapsed,
     toggleSidebar,
-    judges,
-    activeJudgeId,
-    selectJudge,
-    createJudge,
-    deleteJudge,
-    renameJudge,
+    datasets,
+    activeDatasetId,
+    selectDataset,
+    createDataset,
+    deleteDataset,
+    renameDataset,
   } = useTrainingStore();
 
-  const handleCreateJudge = async (name: string) => {
-    await createJudge(name);
+  const handleCreateDataset = async (name: string) => {
+    await createDataset(name);
   };
 
-  const handleDeleteJudge = async (id: string) => {
-    if (window.confirm("Are you sure you want to delete this judge?")) {
-      await deleteJudge(id);
+  const handleDeleteDataset = async (id: string) => {
+    if (window.confirm("Are you sure you want to delete this dataset?")) {
+      await deleteDataset(id);
     }
   };
 
@@ -46,7 +46,7 @@ export function JudgeSidebar() {
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">Judges</span>
               <Badge variant="secondary" className="text-xs">
-                {judges.length}
+                {datasets.length}
               </Badge>
             </div>
           )}
@@ -90,7 +90,7 @@ export function JudgeSidebar() {
 
         {/* Judge List */}
         <div className="flex-1 overflow-y-auto p-2">
-          {judges.length === 0 ? (
+          {datasets.length === 0 ? (
             !sidebarCollapsed && (
               <div className="text-center text-sm text-muted-foreground py-8 px-4">
                 No judges yet.
@@ -100,15 +100,15 @@ export function JudgeSidebar() {
             )
           ) : (
             <div className={`space-y-1 ${sidebarCollapsed ? "flex flex-col items-center" : ""}`}>
-              {judges.map((judge) => (
-                <JudgeListItemComponent
-                  key={judge.id}
-                  judge={judge}
-                  isActive={judge.id === activeJudgeId}
+              {datasets.map((dataset) => (
+                <DatasetListItemComponent
+                  key={dataset.id}
+                  dataset={dataset}
+                  isActive={dataset.id === activeDatasetId}
                   collapsed={sidebarCollapsed}
-                  onSelect={() => selectJudge(judge.id)}
-                  onDelete={() => handleDeleteJudge(judge.id)}
-                  onRename={(newName) => renameJudge(judge.id, newName)}
+                  onSelect={() => selectDataset(dataset.id)}
+                  onDelete={() => handleDeleteDataset(dataset.id)}
+                  onRename={(newName) => renameDataset(dataset.id, newName)}
                 />
               ))}
             </div>
@@ -116,11 +116,11 @@ export function JudgeSidebar() {
         </div>
       </div>
 
-      <CreateJudgeDialog
+      <CreateDatasetDialog
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
-        onSubmit={handleCreateJudge}
-        existingCount={judges.length}
+        onSubmit={handleCreateDataset}
+        existingCount={datasets.length}
       />
     </>
   );

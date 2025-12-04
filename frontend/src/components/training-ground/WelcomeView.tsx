@@ -4,10 +4,10 @@ import { Scale, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface WelcomeViewProps {
-  onCreateJudge: () => void;
+  onCreateDataset: () => void;
 }
 
-export function WelcomeView({ onCreateJudge }: WelcomeViewProps) {
+export function WelcomeView({ onCreateDataset }: WelcomeViewProps) {
   return (
     <div className="flex flex-1 items-center justify-center bg-background">
       <div className="text-center max-w-md px-6">
@@ -20,13 +20,13 @@ export function WelcomeView({ onCreateJudge }: WelcomeViewProps) {
           Welcome to Judge Training Ground
         </h2>
         <p className="text-muted-foreground mb-8">
-          Create your first judge to start training and optimizing LLM-based
-          evaluation systems. Each judge can have its own test cases, prompts,
-          and evaluation results.
+          Create your first dataset to start training and optimizing LLM-based
+          evaluation systems. Each dataset can have multiple prompt versions
+          and evaluation runs.
         </p>
-        <Button size="lg" onClick={onCreateJudge} className="gap-2">
+        <Button size="lg" onClick={onCreateDataset} className="gap-2">
           <Plus className="h-5 w-5" />
-          Create Your First Judge
+          Create Your First Dataset
         </Button>
       </div>
     </div>

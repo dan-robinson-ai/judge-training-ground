@@ -3,10 +3,10 @@
 import { useState, useRef, useEffect } from "react";
 import { Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { JudgeListItem as JudgeListItemType } from "@/lib/types";
+import { DatasetListItem as DatasetListItemType } from "@/lib/types";
 
-interface JudgeListItemProps {
-  judge: JudgeListItemType;
+interface DatasetListItemProps {
+  dataset: DatasetListItemType;
   isActive: boolean;
   collapsed: boolean;
   onSelect: () => void;
@@ -36,16 +36,16 @@ function getAccuracyColor(accuracy: number | null): string {
   return "bg-red-500/20 text-red-400";
 }
 
-export function JudgeListItemComponent({
-  judge,
+export function DatasetListItemComponent({
+  dataset,
   isActive,
   collapsed,
   onSelect,
   onDelete,
   onRename,
-}: JudgeListItemProps) {
+}: DatasetListItemProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState(judge.name);
+  const [editName, setEditName] = useState(dataset.name);
   const [isHovered, setIsHovered] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -58,25 +58,25 @@ export function JudgeListItemComponent({
 
   const handleDoubleClick = () => {
     if (!collapsed) {
-      setEditName(judge.name);
+      setEditName(dataset.name);
       setIsEditing(true);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
-      if (editName.trim() && editName !== judge.name) {
+      if (editName.trim() && editName !== dataset.name) {
         onRename(editName.trim());
       }
       setIsEditing(false);
     } else if (e.key === "Escape") {
-      setEditName(judge.name);
+      setEditName(dataset.name);
       setIsEditing(false);
     }
   };
 
   const handleBlur = () => {
-    if (editName.trim() && editName !== judge.name) {
+    if (editName.trim() && editName !== dataset.name) {
       onRename(editName.trim());
     }
     setIsEditing(false);
@@ -95,9 +95,9 @@ export function JudgeListItemComponent({
             : "bg-secondary/50 text-foreground hover:bg-secondary"
           }
         `}
-        title={judge.name}
+        title={dataset.name}
       >
-        {judge.name.charAt(0).toUpperCase()}
+        {dataset.name.charAt(0).toUpperCase()}
       </button>
     );
   }
@@ -128,19 +128,19 @@ export function JudgeListItemComponent({
               className="w-full bg-background border border-border rounded px-2 py-0.5 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-primary"
             />
           ) : (
-            <div className="text-sm font-medium truncate">{judge.name}</div>
+            <div className="text-sm font-medium truncate">{dataset.name}</div>
           )}
           <div className="text-xs text-muted-foreground mt-0.5">
-            {formatTimeAgo(judge.updatedAt)}
+            {formatTimeAgo(dataset.updatedAt)}
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          {judge.accuracy !== null && (
+          {dataset.bestAccuracy !== null && (
             <Badge
               variant="secondary"
-              className={`text-xs px-1.5 py-0 ${getAccuracyColor(judge.accuracy)}`}
+              className={`text-xs px-1.5 py-0 ${getAccuracyColor(dataset.bestAccuracy)}`}
             >
-              {Math.round(judge.accuracy)}%
+              {Math.round(dataset.bestAccuracy)}%
             </Badge>
           )}
           {isHovered && !isEditing && (
@@ -156,11 +156,18 @@ export function JudgeListItemComponent({
           )}
         </div>
       </div>
-      {judge.testCaseCount > 0 && (
-        <div className="text-xs text-muted-foreground mt-1">
-          {judge.testCaseCount} test case{judge.testCaseCount !== 1 ? "s" : ""}
-        </div>
-      )}
+      <div className="flex gap-2 text-xs text-muted-foreground mt-1">
+        {dataset.testCaseCount > 0 && (
+          <span>
+            {dataset.testCaseCount} test case{dataset.testCaseCount !== 1 ? "s" : ""}
+          </span>
+        )}
+        {dataset.promptVersionCount > 0 && (
+          <span>
+            {dataset.promptVersionCount} version{dataset.promptVersionCount !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

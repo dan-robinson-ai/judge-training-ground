@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -13,14 +14,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Sparkles, Play, Wand2, Loader2, Split } from "lucide-react";
+import { Sparkles, Play, Wand2, Loader2, Split, Save } from "lucide-react";
 
 export function PromptEditor() {
   const {
     intent,
     setIntent,
-    systemPrompt,
-    setSystemPrompt,
+    currentSystemPrompt,
+    setCurrentSystemPrompt,
     selectedModel,
     setSelectedModel,
     generateCount,
@@ -29,7 +30,9 @@ export function PromptEditor() {
     setOptimizerType,
     hasGenerated,
     testCases,
-    runStats,
+    runs,
+    promptVersions,
+    activePromptVersionId,
     isGenerating,
     isRunning,
     isOptimizing,
@@ -37,9 +40,20 @@ export function PromptEditor() {
     generateTestCases,
     runEvaluation,
     optimizePrompt,
+    savePromptVersion,
   } = useTrainingStore();
 
-  const canOptimize = runStats && runStats.accuracy < 100;
+  // Find active version
+  const activeVersion = promptVersions.find(
+    (v) => v.id === activePromptVersionId
+  );
+
+  // Check if we can optimize (need runs for current version)
+  const versionRuns = runs.filter(
+    (r) => r.promptVersionId === activePromptVersionId
+  );
+  const latestRun = versionRuns.length > 0 ? versionRuns[versionRuns.length - 1] : null;
+  const canOptimize = latestRun && latestRun.stats.accuracy < 100;
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
@@ -122,16 +136,34 @@ export function PromptEditor() {
       {/* System Prompt - Only shown after generation */}
       {hasGenerated && (
         <div className="flex flex-1 flex-col space-y-2 min-h-0">
-          <Label htmlFor="prompt" className="text-sm font-medium">
-            System Prompt
-          </Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="prompt" className="text-sm font-medium">
+              System Prompt
+            </Label>
+            {activeVersion && (
+              <Badge variant="outline" className="text-xs">
+                v{activeVersion.version} ({activeVersion.source})
+              </Badge>
+            )}
+          </div>
           <Textarea
             id="prompt"
-            value={systemPrompt}
-            onChange={(e) => setSystemPrompt(e.target.value)}
+            value={currentSystemPrompt}
+            onChange={(e) => setCurrentSystemPrompt(e.target.value)}
             placeholder="System prompt will be generated..."
             className="flex-1 resize-none bg-secondary/50 border-border font-mono text-sm"
           />
+          {/* Save Version Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => savePromptVersion()}
+            disabled={!currentSystemPrompt.trim()}
+            className="w-fit"
+          >
+            <Save className="mr-2 h-4 w-4" />
+            Save as New Version
+          </Button>
         </div>
       )}
 

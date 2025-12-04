@@ -12,21 +12,27 @@ describe("PromptEditor", () => {
   const mockStore = {
     intent: "",
     setIntent: vi.fn(),
-    systemPrompt: "",
-    setSystemPrompt: vi.fn(),
+    currentSystemPrompt: "",
+    setCurrentSystemPrompt: vi.fn(),
     selectedModel: "gpt-4o",
     setSelectedModel: vi.fn(),
     generateCount: 50,
     setGenerateCount: vi.fn(),
+    optimizerType: "bootstrap_fewshot",
+    setOptimizerType: vi.fn(),
     hasGenerated: false,
     testCases: [],
-    runStats: null,
+    runs: [],
+    promptVersions: [],
+    activePromptVersionId: null,
     isGenerating: false,
     isRunning: false,
     isOptimizing: false,
+    isSplit: false,
     generateTestCases: vi.fn(),
     runEvaluation: vi.fn(),
     optimizePrompt: vi.fn(),
+    savePromptVersion: vi.fn(),
   };
 
   beforeEach(() => {
@@ -49,7 +55,9 @@ describe("PromptEditor", () => {
 
     it("should render Model selector", () => {
       render(<PromptEditor />);
-      expect(screen.getByLabelText("Model")).toBeInTheDocument();
+      // Select components don't use proper label associations
+      expect(screen.getByText("Model")).toBeInTheDocument();
+      expect(screen.getByRole("combobox")).toBeInTheDocument();
     });
 
     it("should render Generate Test Cases button", () => {
@@ -67,18 +75,30 @@ describe("PromptEditor", () => {
       expect(screen.queryByRole("button", { name: /run evaluation/i })).not.toBeInTheDocument();
     });
 
-    it("should NOT render Auto-Optimize button before generation", () => {
+    it("should NOT render Optimize button before generation", () => {
       render(<PromptEditor />);
-      expect(screen.queryByRole("button", { name: /auto-optimize/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /optimize/i })).not.toBeInTheDocument();
     });
   });
 
   describe("After Generation", () => {
+    const promptVersionId = "version-1";
     beforeEach(() => {
       vi.mocked(useTrainingStore).mockReturnValue({
         ...mockStore,
         hasGenerated: true,
-        systemPrompt: "Generated system prompt",
+        currentSystemPrompt: "Generated system prompt",
+        activePromptVersionId: promptVersionId,
+        promptVersions: [
+          {
+            id: promptVersionId,
+            version: 1,
+            systemPrompt: "Generated system prompt",
+            source: "generated",
+            createdAt: new Date().toISOString(),
+            parentVersionId: null,
+          },
+        ],
         testCases: [
           {
             id: "test-1",
@@ -101,15 +121,20 @@ describe("PromptEditor", () => {
       expect(screen.getByRole("button", { name: /run evaluation/i })).toBeInTheDocument();
     });
 
-    it("should render Auto-Optimize button after generation", () => {
+    it("should render Optimize button after generation", () => {
       render(<PromptEditor />);
-      expect(screen.getByRole("button", { name: /auto-optimize/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /optimize/i })).toBeInTheDocument();
     });
 
     it("should display the generated system prompt", () => {
       render(<PromptEditor />);
       const textarea = screen.getByLabelText("System Prompt");
       expect(textarea).toHaveValue("Generated system prompt");
+    });
+
+    it("should render Save as New Version button", () => {
+      render(<PromptEditor />);
+      expect(screen.getByRole("button", { name: /save as new version/i })).toBeInTheDocument();
     });
   });
 
@@ -160,10 +185,22 @@ describe("PromptEditor", () => {
   });
 
   describe("Run Evaluation", () => {
+    const promptVersionId = "version-1";
     beforeEach(() => {
       vi.mocked(useTrainingStore).mockReturnValue({
         ...mockStore,
         hasGenerated: true,
+        activePromptVersionId: promptVersionId,
+        promptVersions: [
+          {
+            id: promptVersionId,
+            version: 1,
+            systemPrompt: "Test prompt",
+            source: "generated",
+            createdAt: new Date().toISOString(),
+            parentVersionId: null,
+          },
+        ],
         testCases: [
           {
             id: "test-1",
@@ -187,6 +224,17 @@ describe("PromptEditor", () => {
       vi.mocked(useTrainingStore).mockReturnValue({
         ...mockStore,
         hasGenerated: true,
+        activePromptVersionId: promptVersionId,
+        promptVersions: [
+          {
+            id: promptVersionId,
+            version: 1,
+            systemPrompt: "Test",
+            source: "generated",
+            createdAt: new Date().toISOString(),
+            parentVersionId: null,
+          },
+        ],
         testCases: [{ id: "1", input_text: "", expected_verdict: "PASS", reasoning: "", verified: false }],
         isRunning: true,
       });
@@ -200,6 +248,17 @@ describe("PromptEditor", () => {
       vi.mocked(useTrainingStore).mockReturnValue({
         ...mockStore,
         hasGenerated: true,
+        activePromptVersionId: promptVersionId,
+        promptVersions: [
+          {
+            id: promptVersionId,
+            version: 1,
+            systemPrompt: "Test",
+            source: "generated",
+            createdAt: new Date().toISOString(),
+            parentVersionId: null,
+          },
+        ],
         testCases: [],
       });
 
@@ -209,24 +268,46 @@ describe("PromptEditor", () => {
     });
   });
 
-  describe("Auto-Optimize", () => {
+  describe("Optimize", () => {
+    const promptVersionId = "version-1";
+
     it("should disable optimize button when accuracy is 100%", () => {
       vi.mocked(useTrainingStore).mockReturnValue({
         ...mockStore,
         hasGenerated: true,
+        activePromptVersionId: promptVersionId,
+        promptVersions: [
+          {
+            id: promptVersionId,
+            version: 1,
+            systemPrompt: "Test",
+            source: "generated",
+            createdAt: new Date().toISOString(),
+            parentVersionId: null,
+          },
+        ],
         testCases: [{ id: "1", input_text: "", expected_verdict: "PASS", reasoning: "", verified: false }],
-        runStats: {
-          total: 1,
-          passed: 1,
-          failed: 0,
-          errors: 0,
-          accuracy: 100,
-          results: [],
-        },
+        runs: [
+          {
+            id: "run-1",
+            promptVersionId,
+            modelName: "gpt-4o",
+            createdAt: new Date().toISOString(),
+            stats: {
+              total: 1,
+              passed: 1,
+              failed: 0,
+              errors: 0,
+              accuracy: 100,
+              cohen_kappa: 1.0,
+              results: [],
+            },
+          },
+        ],
       });
 
       render(<PromptEditor />);
-      const button = screen.getByRole("button", { name: /auto-optimize/i });
+      const button = screen.getByRole("button", { name: /optimize/i });
       expect(button).toBeDisabled();
     });
 
@@ -234,19 +315,39 @@ describe("PromptEditor", () => {
       vi.mocked(useTrainingStore).mockReturnValue({
         ...mockStore,
         hasGenerated: true,
+        activePromptVersionId: promptVersionId,
+        promptVersions: [
+          {
+            id: promptVersionId,
+            version: 1,
+            systemPrompt: "Test",
+            source: "generated",
+            createdAt: new Date().toISOString(),
+            parentVersionId: null,
+          },
+        ],
         testCases: [{ id: "1", input_text: "", expected_verdict: "PASS", reasoning: "", verified: false }],
-        runStats: {
-          total: 2,
-          passed: 1,
-          failed: 1,
-          errors: 0,
-          accuracy: 50,
-          results: [],
-        },
+        runs: [
+          {
+            id: "run-1",
+            promptVersionId,
+            modelName: "gpt-4o",
+            createdAt: new Date().toISOString(),
+            stats: {
+              total: 2,
+              passed: 1,
+              failed: 1,
+              errors: 0,
+              accuracy: 50,
+              cohen_kappa: 0.5,
+              results: [],
+            },
+          },
+        ],
       });
 
       render(<PromptEditor />);
-      const button = screen.getByRole("button", { name: /auto-optimize/i });
+      const button = screen.getByRole("button", { name: /optimize/i });
       expect(button).not.toBeDisabled();
     });
 
@@ -254,19 +355,39 @@ describe("PromptEditor", () => {
       vi.mocked(useTrainingStore).mockReturnValue({
         ...mockStore,
         hasGenerated: true,
+        activePromptVersionId: promptVersionId,
+        promptVersions: [
+          {
+            id: promptVersionId,
+            version: 1,
+            systemPrompt: "Test",
+            source: "generated",
+            createdAt: new Date().toISOString(),
+            parentVersionId: null,
+          },
+        ],
         testCases: [{ id: "1", input_text: "", expected_verdict: "PASS", reasoning: "", verified: false }],
-        runStats: {
-          total: 2,
-          passed: 1,
-          failed: 1,
-          errors: 0,
-          accuracy: 50,
-          results: [],
-        },
+        runs: [
+          {
+            id: "run-1",
+            promptVersionId,
+            modelName: "gpt-4o",
+            createdAt: new Date().toISOString(),
+            stats: {
+              total: 2,
+              passed: 1,
+              failed: 1,
+              errors: 0,
+              accuracy: 50,
+              cohen_kappa: 0.5,
+              results: [],
+            },
+          },
+        ],
       });
 
       render(<PromptEditor />);
-      const button = screen.getByRole("button", { name: /auto-optimize/i });
+      const button = screen.getByRole("button", { name: /optimize/i });
       fireEvent.click(button);
       expect(mockStore.optimizePrompt).toHaveBeenCalled();
     });

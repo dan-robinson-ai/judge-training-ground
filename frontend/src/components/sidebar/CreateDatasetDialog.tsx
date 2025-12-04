@@ -12,25 +12,25 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-interface CreateJudgeDialogProps {
+interface CreateDatasetDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (name: string) => void;
   existingCount: number;
 }
 
-export function CreateJudgeDialog({
+export function CreateDatasetDialog({
   open,
   onOpenChange,
   onSubmit,
   existingCount,
-}: CreateJudgeDialogProps) {
+}: CreateDatasetDialogProps) {
   const [name, setName] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const judgeName = name.trim() || `Judge ${existingCount + 1}`;
-    onSubmit(judgeName);
+    const datasetName = name.trim() || `Dataset ${existingCount + 1}`;
+    onSubmit(datasetName);
     setName("");
     onOpenChange(false);
   };
@@ -51,9 +51,9 @@ export function CreateJudgeDialog({
         <form onSubmit={handleSubmit}>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="judge-name">Judge Name</Label>
+              <Label htmlFor="dataset-name">Judge Name</Label>
               <Input
-                id="judge-name"
+                id="dataset-name"
                 placeholder={`Judge ${existingCount + 1}`}
                 value={name}
                 onChange={(e) => setName(e.target.value)}

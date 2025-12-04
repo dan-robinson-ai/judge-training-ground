@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { useTrainingStore } from "@/lib/store";
 import { PromptEditor } from "@/components/training-ground/PromptEditor";
 import { DataGrid } from "@/components/training-ground/DataGrid";
-import { ResultsView } from "@/components/training-ground/ResultsView";
+import { PromptVersionsView } from "@/components/training-ground/PromptVersionsView";
+import { RunHistoryView } from "@/components/training-ground/RunHistoryView";
 import { WelcomeView } from "@/components/training-ground/WelcomeView";
-import { JudgeSidebar } from "@/components/sidebar/JudgeSidebar";
+import { DatasetSidebar } from "@/components/sidebar/DatasetSidebar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Database, LineChart, AlertCircle, X, Loader2 } from "lucide-react";
+import { Database, GitBranch, History, AlertCircle, X, Loader2 } from "lucide-react";
 
 export default function Home() {
   const {
@@ -16,30 +17,30 @@ export default function Home() {
     setActiveTab,
     error,
     clearError,
-    judges,
-    activeJudgeId,
-    isLoadingJudges,
-    loadJudges,
-    createJudge,
+    datasets,
+    activeDatasetId,
+    isLoadingDatasets,
+    loadDatasets,
+    createDataset,
   } = useTrainingStore();
 
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Load judges on mount
+  // Load datasets on mount
   useEffect(() => {
     const init = async () => {
-      await loadJudges();
+      await loadDatasets();
       setIsInitialized(true);
     };
     init();
-  }, [loadJudges]);
+  }, [loadDatasets]);
 
-  const handleCreateFirstJudge = async () => {
-    await createJudge();
+  const handleCreateFirstDataset = async () => {
+    await createDataset();
   };
 
   // Show loading state while initializing
-  if (!isInitialized || isLoadingJudges) {
+  if (!isInitialized || isLoadingDatasets) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -47,7 +48,7 @@ export default function Home() {
     );
   }
 
-  const showWelcome = judges.length === 0 || !activeJudgeId;
+  const showWelcome = datasets.length === 0 || !activeDatasetId;
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -83,11 +84,11 @@ export default function Home() {
       {/* Main Content */}
       <div className="flex flex-1 min-h-0">
         {/* Sidebar */}
-        <JudgeSidebar />
+        <DatasetSidebar />
 
         {/* Content Area */}
         {showWelcome ? (
-          <WelcomeView onCreateJudge={handleCreateFirstJudge} />
+          <WelcomeView onCreateDataset={handleCreateFirstDataset} />
         ) : (
           <div className="flex flex-1 min-h-0">
             {/* Left Panel - Engineer View */}
@@ -99,7 +100,7 @@ export default function Home() {
             <div className="w-1/2 flex flex-col">
               <Tabs
                 value={activeTab}
-                onValueChange={(v) => setActiveTab(v as "dataset" | "results")}
+                onValueChange={(v) => setActiveTab(v as "dataset" | "versions" | "history")}
                 className="flex flex-1 flex-col"
               >
                 <div className="border-b border-border px-4">
@@ -112,19 +113,29 @@ export default function Home() {
                       Dataset
                     </TabsTrigger>
                     <TabsTrigger
-                      value="results"
+                      value="versions"
                       className="gap-2 data-[state=active]:bg-secondary"
                     >
-                      <LineChart className="h-4 w-4" />
-                      Results
+                      <GitBranch className="h-4 w-4" />
+                      Versions
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="history"
+                      className="gap-2 data-[state=active]:bg-secondary"
+                    >
+                      <History className="h-4 w-4" />
+                      Run History
                     </TabsTrigger>
                   </TabsList>
                 </div>
                 <TabsContent value="dataset" className="flex-1 m-0 min-h-0">
                   <DataGrid />
                 </TabsContent>
-                <TabsContent value="results" className="flex-1 m-0 min-h-0">
-                  <ResultsView />
+                <TabsContent value="versions" className="flex-1 m-0 min-h-0">
+                  <PromptVersionsView />
+                </TabsContent>
+                <TabsContent value="history" className="flex-1 m-0 min-h-0">
+                  <RunHistoryView />
                 </TabsContent>
               </Tabs>
             </div>

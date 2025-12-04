@@ -1,11 +1,11 @@
-import { JudgeStorageProvider } from "./types";
+import { DatasetStorageProvider } from "./types";
 import { LocalStorageProvider } from "./localStorage";
 
 type StorageType = "localStorage" | "backend";
 
 export function createStorageProvider(
   type: StorageType = "localStorage"
-): JudgeStorageProvider {
+): DatasetStorageProvider {
   switch (type) {
     case "localStorage":
       return new LocalStorageProvider();

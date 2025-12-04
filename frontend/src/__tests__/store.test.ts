@@ -14,10 +14,10 @@ vi.mock("@/lib/api", () => ({
 // Mock the persistence module
 vi.mock("@/lib/persistence", () => ({
   storage: {
-    getAllJudges: vi.fn().mockResolvedValue([]),
-    getJudge: vi.fn().mockResolvedValue(null),
-    saveJudge: vi.fn().mockResolvedValue(undefined),
-    deleteJudge: vi.fn().mockResolvedValue(undefined),
+    getAllDatasets: vi.fn().mockResolvedValue([]),
+    getDataset: vi.fn().mockResolvedValue(null),
+    saveDataset: vi.fn().mockResolvedValue(undefined),
+    deleteDataset: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -27,15 +27,17 @@ describe("TrainingStore", () => {
     useTrainingStore.setState({
       // App-level UI state
       sidebarCollapsed: false,
-      // Judge collection state
-      judges: [],
-      activeJudgeId: null,
-      isLoadingJudges: false,
-      // Active judge state
+      // Dataset collection state
+      datasets: [],
+      activeDatasetId: null,
+      isLoadingDatasets: false,
+      // Active dataset state
       intent: "",
-      systemPrompt: "",
       testCases: [],
-      runStats: null,
+      promptVersions: [],
+      runs: [],
+      activePromptVersionId: null,
+      currentSystemPrompt: "",
       selectedModel: "gpt-4o",
       generateCount: 50,
       optimizerType: "bootstrap_fewshot",
@@ -54,9 +56,10 @@ describe("TrainingStore", () => {
     it("should have correct initial values", () => {
       const state = useTrainingStore.getState();
       expect(state.intent).toBe("");
-      expect(state.systemPrompt).toBe("");
+      expect(state.currentSystemPrompt).toBe("");
       expect(state.testCases).toEqual([]);
-      expect(state.runStats).toBeNull();
+      expect(state.runs).toEqual([]);
+      expect(state.promptVersions).toEqual([]);
       expect(state.selectedModel).toBe("gpt-4o");
       expect(state.generateCount).toBe(50);
       expect(state.hasGenerated).toBe(false);
@@ -74,9 +77,9 @@ describe("TrainingStore", () => {
       expect(useTrainingStore.getState().intent).toBe("Detect toxic messages");
     });
 
-    it("should set system prompt", () => {
-      useTrainingStore.getState().setSystemPrompt("You are a judge...");
-      expect(useTrainingStore.getState().systemPrompt).toBe("You are a judge...");
+    it("should set current system prompt", () => {
+      useTrainingStore.getState().setCurrentSystemPrompt("You are a judge...");
+      expect(useTrainingStore.getState().currentSystemPrompt).toBe("You are a judge...");
     });
 
     it("should set selected model", () => {
@@ -90,8 +93,8 @@ describe("TrainingStore", () => {
     });
 
     it("should set active tab", () => {
-      useTrainingStore.getState().setActiveTab("results");
-      expect(useTrainingStore.getState().activeTab).toBe("results");
+      useTrainingStore.getState().setActiveTab("history");
+      expect(useTrainingStore.getState().activeTab).toBe("history");
     });
 
     it("should clear error", () => {
@@ -182,7 +185,9 @@ describe("TrainingStore", () => {
 
         expect(api.generateTestCases).toHaveBeenCalledWith("Detect spam", 10, "gpt-4o");
         expect(useTrainingStore.getState().testCases).toEqual(mockResponse.test_cases);
-        expect(useTrainingStore.getState().systemPrompt).toBe("Generated system prompt");
+        expect(useTrainingStore.getState().currentSystemPrompt).toBe("Generated system prompt");
+        expect(useTrainingStore.getState().promptVersions).toHaveLength(1);
+        expect(useTrainingStore.getState().promptVersions[0].source).toBe("generated");
         expect(useTrainingStore.getState().hasGenerated).toBe(true);
         expect(useTrainingStore.getState().isGenerating).toBe(false);
       });
@@ -224,8 +229,9 @@ describe("TrainingStore", () => {
 
         vi.mocked(api.runEvaluation).mockResolvedValue(mockRunStats);
 
+        const promptVersionId = "version-1";
         useTrainingStore.setState({
-          systemPrompt: "You are a judge",
+          currentSystemPrompt: "You are a judge",
           testCases: [
             {
               id: "test-1",
@@ -236,6 +242,17 @@ describe("TrainingStore", () => {
             },
           ],
           selectedModel: "gpt-4o",
+          activePromptVersionId: promptVersionId,
+          promptVersions: [
+            {
+              id: promptVersionId,
+              version: 1,
+              systemPrompt: "You are a judge",
+              source: "manual",
+              createdAt: new Date().toISOString(),
+              parentVersionId: null,
+            },
+          ],
         });
 
         await useTrainingStore.getState().runEvaluation();
@@ -245,13 +262,18 @@ describe("TrainingStore", () => {
           expect.any(Array),
           "gpt-4o"
         );
-        expect(useTrainingStore.getState().runStats).toEqual(mockRunStats);
-        expect(useTrainingStore.getState().activeTab).toBe("results");
+        expect(useTrainingStore.getState().runs).toHaveLength(1);
+        expect(useTrainingStore.getState().runs[0].stats).toEqual(mockRunStats);
+        expect(useTrainingStore.getState().activeTab).toBe("history");
       });
     });
 
     describe("optimizePrompt", () => {
-      it("should set error if no runStats", async () => {
+      it("should set error if no runs", async () => {
+        useTrainingStore.setState({
+          activePromptVersionId: "version-1",
+          runs: [],
+        });
         await useTrainingStore.getState().optimizePrompt();
         expect(useTrainingStore.getState().error).toBe("Run an evaluation first");
       });
@@ -274,30 +296,52 @@ describe("TrainingStore", () => {
 
         vi.mocked(api.optimizePrompt).mockResolvedValue(mockOptimizeResponse);
 
+        const promptVersionId = "version-1";
         useTrainingStore.setState({
-          systemPrompt: "Original prompt",
+          currentSystemPrompt: "Original prompt",
           testCases: [testCase],
-          runStats: {
-            total: 1,
-            passed: 0,
-            failed: 1,
-            errors: 0,
-            accuracy: 0,
-            cohen_kappa: 0,
-            results: [
-              {
-                test_case_id: "test-1",
-                actual_verdict: "FAIL" as const,
-                reasoning: "Wrong",
-                correct: false,
+          activePromptVersionId: promptVersionId,
+          promptVersions: [
+            {
+              id: promptVersionId,
+              version: 1,
+              systemPrompt: "Original prompt",
+              source: "manual",
+              createdAt: new Date().toISOString(),
+              parentVersionId: null,
+            },
+          ],
+          runs: [
+            {
+              id: "run-1",
+              promptVersionId: promptVersionId,
+              modelName: "gpt-4o",
+              createdAt: new Date().toISOString(),
+              stats: {
+                total: 1,
+                passed: 0,
+                failed: 1,
+                errors: 0,
+                accuracy: 0,
+                cohen_kappa: 0,
+                results: [
+                  {
+                    test_case_id: "test-1",
+                    actual_verdict: "FAIL" as const,
+                    reasoning: "Wrong",
+                    correct: false,
+                  },
+                ],
               },
-            ],
-          },
+            },
+          ],
         });
 
         await useTrainingStore.getState().optimizePrompt();
 
-        expect(useTrainingStore.getState().systemPrompt).toBe("Improved prompt");
+        expect(useTrainingStore.getState().currentSystemPrompt).toBe("Improved prompt");
+        expect(useTrainingStore.getState().promptVersions).toHaveLength(2);
+        expect(useTrainingStore.getState().promptVersions[1].source).toBe("optimized");
         expect(useTrainingStore.getState().isOptimizing).toBe(false);
         expect(useTrainingStore.getState().isSplit).toBe(true);
       });
