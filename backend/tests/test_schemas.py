@@ -2,20 +2,19 @@
 
 import pytest
 from pydantic import ValidationError
+
 from app.schemas import (
-    TestCase,
     EvaluationResult,
-    GenerateRequest,
-    GenerateResponse,
-    RunRequest,
-    RunStats,
-    OptimizeRequest,
-    OptimizeResponse,
+    GeneratedSystemPrompt,
     GeneratedTestCase,
     GeneratedTestCaseList,
+    GenerateRequest,
+    GenerateResponse,
     JudgeVerdict,
     OptimizedPromptResponse,
-    GeneratedSystemPrompt,
+    RunRequest,
+    RunStats,
+    TestCase,
 )
 
 

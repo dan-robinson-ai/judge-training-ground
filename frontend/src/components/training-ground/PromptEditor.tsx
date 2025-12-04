@@ -1,7 +1,7 @@
 "use client";
 
 import { useTrainingStore } from "@/lib/store";
-import { AVAILABLE_MODELS, OPTIMIZER_OPTIONS } from "@/lib/types";
+import { AVAILABLE_MODELS, FRAMEWORK_OPTIONS, getOptimizersForFramework } from "@/lib/types";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,8 @@ export function PromptEditor() {
     setSelectedModel,
     generateCount,
     setGenerateCount,
+    optimizerFramework,
+    setOptimizerFramework,
     optimizerType,
     setOptimizerType,
     hasGenerated,
@@ -42,6 +44,9 @@ export function PromptEditor() {
     optimizePrompt,
     savePromptVersion,
   } = useTrainingStore();
+
+  // Get optimizers available for the selected framework
+  const availableOptimizers = getOptimizersForFramework(optimizerFramework);
 
   // Find active version
   const activeVersion = promptVersions.find(
@@ -167,6 +172,32 @@ export function PromptEditor() {
         </div>
       )}
 
+      {/* Framework Selector - Only shown after generation */}
+      {hasGenerated && (
+        <div className="space-y-2">
+          <Label htmlFor="framework" className="text-sm font-medium">
+            Optimization Framework
+          </Label>
+          <Select value={optimizerFramework} onValueChange={setOptimizerFramework}>
+            <SelectTrigger className="bg-secondary/50 border-border">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {FRAMEWORK_OPTIONS.map((fw) => (
+                <SelectItem key={fw.value} value={fw.value}>
+                  <div className="flex flex-col">
+                    <span>{fw.label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {fw.description}
+                    </span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Optimizer Selector - Only shown after generation */}
       {hasGenerated && (
         <div className="space-y-2">
@@ -178,7 +209,7 @@ export function PromptEditor() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {OPTIMIZER_OPTIONS.map((opt) => (
+              {availableOptimizers.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
                   <div className="flex flex-col">
                     <span>{opt.label}</span>

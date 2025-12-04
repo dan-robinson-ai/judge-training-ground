@@ -8,6 +8,7 @@ dependencies = [
     "dspy>=2.6.0",
     "fastapi>=0.122.0",
     "litellm>=1.80.5",
+    "opik-optimizer>=2.3.6",
     "pydantic>=2.12.4",
     "python-dotenv>=1.2.1",
     "uvicorn>=0.38.0",

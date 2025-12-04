@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field
 from typing import Literal
 from uuid import uuid4
+
+from pydantic import BaseModel, Field
 
 
 # LLM Response Schemas (for structured output)
@@ -83,7 +84,36 @@ class RunStats(BaseModel):
     results: list[EvaluationResult]
 
 
-OptimizerType = Literal["bootstrap_fewshot", "miprov2", "copro"]
+# Framework types
+OptimizerFramework = Literal["dspy", "opik"]
+
+# DSPy optimizer types
+DSPyOptimizerType = Literal["bootstrap_fewshot", "miprov2", "copro"]
+
+# Opik optimizer types
+OpikOptimizerType = Literal[
+    "evolutionary",
+    "fewshot_bayesian",
+    "metaprompt",
+    "hierarchical_reflective",
+    "gepa",
+    "parameter",
+]
+
+# Combined optimizer type for API
+OptimizerType = Literal[
+    # DSPy
+    "bootstrap_fewshot",
+    "miprov2",
+    "copro",
+    # Opik
+    "evolutionary",
+    "fewshot_bayesian",
+    "metaprompt",
+    "hierarchical_reflective",
+    "gepa",
+    "parameter",
+]
 
 
 class OptimizeRequest(BaseModel):
@@ -91,6 +121,7 @@ class OptimizeRequest(BaseModel):
     current_prompt: str
     test_cases: list[TestCase]
     results: list[EvaluationResult]
+    framework: OptimizerFramework = "dspy"
     optimizer_type: OptimizerType = "bootstrap_fewshot"
     model: str = Field(default="gpt-4o", description="LiteLLM model name")
 

@@ -1,12 +1,11 @@
 """Test case and system prompt generation service."""
 
 from app.schemas import (
-    TestCase,
-    GeneratedTestCaseList,
     GeneratedSystemPrompt,
+    GeneratedTestCaseList,
+    TestCase,
 )
 from app.services.llm import call_llm
-
 
 GENERATION_PROMPT = """You are an expert at generating diverse test cases for AI evaluation systems.
 

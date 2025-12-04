@@ -7,6 +7,8 @@ import {
   PromptVersion,
   Run,
   OptimizerType,
+  OptimizerFramework,
+  getOptimizersForFramework,
 } from "./types";
 import { api } from "./api";
 import { storage } from "./persistence";
@@ -43,6 +45,7 @@ interface TrainingStore {
   currentSystemPrompt: string;
   selectedModel: string;
   generateCount: number;
+  optimizerFramework: OptimizerFramework;
   optimizerType: OptimizerType;
 
   // Flags
@@ -76,6 +79,7 @@ interface TrainingStore {
   setCurrentSystemPrompt: (prompt: string) => void;
   setSelectedModel: (model: string) => void;
   setGenerateCount: (count: number) => void;
+  setOptimizerFramework: (framework: OptimizerFramework) => void;
   setOptimizerType: (optimizerType: OptimizerType) => void;
   clearError: () => void;
 
@@ -177,6 +181,7 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
   currentSystemPrompt: "",
   selectedModel: "gpt-4o",
   generateCount: 50,
+  optimizerFramework: "dspy" as OptimizerFramework,
   optimizerType: "bootstrap_fewshot" as OptimizerType,
   hasGenerated: false,
   isGenerating: false,
@@ -401,6 +406,14 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
     set({ generateCount });
     debouncedPersist(get);
   },
+  setOptimizerFramework: (optimizerFramework) => {
+    // Reset optimizer type to first available for new framework
+    const available = getOptimizersForFramework(optimizerFramework);
+    set({
+      optimizerFramework,
+      optimizerType: available[0]?.value || "bootstrap_fewshot",
+    });
+  },
   setOptimizerType: (optimizerType) => {
     set({ optimizerType });
   },
@@ -528,6 +541,7 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
       testCases,
       runs,
       activePromptVersionId,
+      optimizerFramework,
       optimizerType,
       selectedModel,
     } = state;
@@ -549,6 +563,7 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
         currentSystemPrompt,
         testCases,
         lastRun.stats.results,
+        optimizerFramework,
         optimizerType,
         selectedModel
       );
@@ -563,6 +578,7 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
         parentVersionId: activePromptVersionId,
         notes: result.modification_notes,
         optimizerType,
+        framework: optimizerFramework,
       };
 
       set({

@@ -1,7 +1,8 @@
 """LLM Judge service for evaluating test cases."""
 
 import asyncio
-from app.schemas import TestCase, EvaluationResult, JudgeVerdict
+
+from app.schemas import EvaluationResult, JudgeVerdict, TestCase
 from app.services.llm import call_llm
 
 

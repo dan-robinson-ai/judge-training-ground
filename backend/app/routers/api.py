@@ -1,16 +1,17 @@
 from fastapi import APIRouter, HTTPException
+
 from app.schemas import (
     GenerateRequest,
     GenerateResponse,
-    RunRequest,
-    RunStats,
     OptimizeRequest,
     OptimizeResponse,
+    RunRequest,
+    RunStats,
 )
 from app.services.generator import generate_test_cases
 from app.services.judge import LLMJudge
-from app.services.optimizer import optimize_prompt
 from app.services.metrics import calculate_cohen_kappa
+from app.services.optimizer import optimize_prompt
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -67,16 +68,17 @@ async def run_endpoint(request: RunRequest) -> RunStats:
 
 @router.post("/optimize", response_model=OptimizeResponse)
 async def optimize_endpoint(request: OptimizeRequest) -> OptimizeResponse:
-    """Optimize the system prompt using DSPy optimizers.
+    """Optimize the system prompt using DSPy or Opik optimizers.
 
     This endpoint automatically splits the data if not already split,
-    then uses the specified optimizer to improve the prompt.
+    then uses the specified framework and optimizer to improve the prompt.
     """
     try:
         result = await optimize_prompt(
             current_prompt=request.current_prompt,
             test_cases=request.test_cases,
             results=request.results,
+            framework=request.framework,
             optimizer_type=request.optimizer_type,
             model=request.model,
         )

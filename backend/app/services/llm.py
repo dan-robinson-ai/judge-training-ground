@@ -1,15 +1,16 @@
 """Utility functions for LLM calls using litellm with structured output support."""
 
+from typing import TypeVar
+
 import litellm
 from pydantic import BaseModel
-from typing import TypeVar, Type
 
 T = TypeVar("T", bound=BaseModel)
 
 
 async def call_llm(
     messages: list[dict[str, str]],
-    response_model: Type[T],
+    response_model: type[T],
     model: str = "gpt-4o",
     temperature: float = 0.7,
 ) -> T:

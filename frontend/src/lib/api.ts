@@ -1,4 +1,4 @@
-import { TestCase, EvaluationResult, GenerateResponse, RunStats, OptimizeResponse, OptimizerType } from "./types";
+import { TestCase, EvaluationResult, GenerateResponse, RunStats, OptimizeResponse, OptimizerType, OptimizerFramework } from "./types";
 
 const API_BASE = "http://localhost:8000";
 
@@ -53,6 +53,7 @@ class ApiClient {
     currentPrompt: string,
     testCases: TestCase[],
     results: EvaluationResult[],
+    framework: OptimizerFramework = "dspy",
     optimizerType: OptimizerType = "bootstrap_fewshot",
     model: string = "gpt-4o"
   ): Promise<OptimizeResponse> {
@@ -62,6 +63,7 @@ class ApiClient {
         current_prompt: currentPrompt,
         test_cases: testCases,
         results: results,
+        framework: framework,
         optimizer_type: optimizerType,
         model: model,
       }),

@@ -1,8 +1,10 @@
 """Shared test fixtures and configuration."""
 
-import pytest
 from unittest.mock import AsyncMock, patch
-from app.schemas import TestCase, EvaluationResult
+
+import pytest
+
+from app.schemas import EvaluationResult, TestCase
 
 
 @pytest.fixture
