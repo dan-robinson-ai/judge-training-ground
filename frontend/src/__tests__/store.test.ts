@@ -11,10 +11,27 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 
+// Mock the persistence module
+vi.mock("@/lib/persistence", () => ({
+  storage: {
+    getAllJudges: vi.fn().mockResolvedValue([]),
+    getJudge: vi.fn().mockResolvedValue(null),
+    saveJudge: vi.fn().mockResolvedValue(undefined),
+    deleteJudge: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 describe("TrainingStore", () => {
   beforeEach(() => {
     // Reset store to initial state before each test
     useTrainingStore.setState({
+      // App-level UI state
+      sidebarCollapsed: false,
+      // Judge collection state
+      judges: [],
+      activeJudgeId: null,
+      isLoadingJudges: false,
+      // Active judge state
       intent: "",
       systemPrompt: "",
       testCases: [],

@@ -1,14 +1,53 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useTrainingStore } from "@/lib/store";
 import { PromptEditor } from "@/components/training-ground/PromptEditor";
 import { DataGrid } from "@/components/training-ground/DataGrid";
 import { ResultsView } from "@/components/training-ground/ResultsView";
+import { WelcomeView } from "@/components/training-ground/WelcomeView";
+import { JudgeSidebar } from "@/components/sidebar/JudgeSidebar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Database, LineChart, AlertCircle, X } from "lucide-react";
+import { Database, LineChart, AlertCircle, X, Loader2 } from "lucide-react";
 
 export default function Home() {
-  const { activeTab, setActiveTab, error, clearError } = useTrainingStore();
+  const {
+    activeTab,
+    setActiveTab,
+    error,
+    clearError,
+    judges,
+    activeJudgeId,
+    isLoadingJudges,
+    loadJudges,
+    createJudge,
+  } = useTrainingStore();
+
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Load judges on mount
+  useEffect(() => {
+    const init = async () => {
+      await loadJudges();
+      setIsInitialized(true);
+    };
+    init();
+  }, [loadJudges]);
+
+  const handleCreateFirstJudge = async () => {
+    await createJudge();
+  };
+
+  // Show loading state while initializing
+  if (!isInitialized || isLoadingJudges) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const showWelcome = judges.length === 0 || !activeJudgeId;
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -43,44 +82,54 @@ export default function Home() {
 
       {/* Main Content */}
       <div className="flex flex-1 min-h-0">
-        {/* Left Panel - Engineer View */}
-        <div className="w-1/2 border-r border-border">
-          <PromptEditor />
-        </div>
+        {/* Sidebar */}
+        <JudgeSidebar />
 
-        {/* Right Panel - Data View */}
-        <div className="w-1/2 flex flex-col">
-          <Tabs
-            value={activeTab}
-            onValueChange={(v) => setActiveTab(v as "dataset" | "results")}
-            className="flex flex-1 flex-col"
-          >
-            <div className="border-b border-border px-4">
-              <TabsList className="h-12 bg-transparent">
-                <TabsTrigger
-                  value="dataset"
-                  className="gap-2 data-[state=active]:bg-secondary"
-                >
-                  <Database className="h-4 w-4" />
-                  Dataset
-                </TabsTrigger>
-                <TabsTrigger
-                  value="results"
-                  className="gap-2 data-[state=active]:bg-secondary"
-                >
-                  <LineChart className="h-4 w-4" />
-                  Results
-                </TabsTrigger>
-              </TabsList>
+        {/* Content Area */}
+        {showWelcome ? (
+          <WelcomeView onCreateJudge={handleCreateFirstJudge} />
+        ) : (
+          <div className="flex flex-1 min-h-0">
+            {/* Left Panel - Engineer View */}
+            <div className="w-1/2 border-r border-border">
+              <PromptEditor />
             </div>
-            <TabsContent value="dataset" className="flex-1 m-0 min-h-0">
-              <DataGrid />
-            </TabsContent>
-            <TabsContent value="results" className="flex-1 m-0 min-h-0">
-              <ResultsView />
-            </TabsContent>
-          </Tabs>
-        </div>
+
+            {/* Right Panel - Data View */}
+            <div className="w-1/2 flex flex-col">
+              <Tabs
+                value={activeTab}
+                onValueChange={(v) => setActiveTab(v as "dataset" | "results")}
+                className="flex flex-1 flex-col"
+              >
+                <div className="border-b border-border px-4">
+                  <TabsList className="h-12 bg-transparent">
+                    <TabsTrigger
+                      value="dataset"
+                      className="gap-2 data-[state=active]:bg-secondary"
+                    >
+                      <Database className="h-4 w-4" />
+                      Dataset
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="results"
+                      className="gap-2 data-[state=active]:bg-secondary"
+                    >
+                      <LineChart className="h-4 w-4" />
+                      Results
+                    </TabsTrigger>
+                  </TabsList>
+                </div>
+                <TabsContent value="dataset" className="flex-1 m-0 min-h-0">
+                  <DataGrid />
+                </TabsContent>
+                <TabsContent value="results" className="flex-1 m-0 min-h-0">
+                  <ResultsView />
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,9 +1,30 @@
 import { create } from "zustand";
-import { TestCase, RunStats } from "./types";
+import { TestCase, RunStats, Judge, JudgeListItem } from "./types";
 import { api } from "./api";
+import { storage } from "./persistence";
+
+// Debounce helper
+function debounce<Args extends unknown[]>(
+  fn: (...args: Args) => void,
+  ms: number
+): (...args: Args) => void {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  return (...args: Args) => {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), ms);
+  };
+}
 
 interface TrainingStore {
-  // State
+  // App-level UI state
+  sidebarCollapsed: boolean;
+
+  // Judge collection state
+  judges: JudgeListItem[];
+  activeJudgeId: string | null;
+  isLoadingJudges: boolean;
+
+  // Active judge state
   intent: string;
   systemPrompt: string;
   testCases: TestCase[];
@@ -19,7 +40,17 @@ interface TrainingStore {
   error: string | null;
   activeTab: "dataset" | "results";
 
-  // Actions
+  // UI Actions
+  toggleSidebar: () => void;
+
+  // Judge management actions
+  loadJudges: () => Promise<void>;
+  selectJudge: (id: string) => Promise<void>;
+  createJudge: (name?: string) => Promise<string>;
+  deleteJudge: (id: string) => Promise<void>;
+  renameJudge: (id: string, newName: string) => Promise<void>;
+
+  // State setters
   setIntent: (intent: string) => void;
   setSystemPrompt: (prompt: string) => void;
   setSelectedModel: (model: string) => void;
@@ -39,8 +70,66 @@ interface TrainingStore {
   splitDataset: () => Promise<void>;
 }
 
+// Helper to build a Judge object from current state
+function buildJudgeFromState(state: TrainingStore, id: string, name: string, createdAt: string): Judge {
+  return {
+    id,
+    name,
+    createdAt,
+    updatedAt: new Date().toISOString(),
+    intent: state.intent,
+    systemPrompt: state.systemPrompt,
+    testCases: state.testCases,
+    runStats: state.runStats,
+    selectedModel: state.selectedModel,
+    generateCount: state.generateCount,
+    hasGenerated: state.hasGenerated,
+    isSplit: state.isSplit,
+  };
+}
+
+// Create debounced persist function
+const debouncedPersist = debounce(async (get: () => TrainingStore) => {
+  const state = get();
+  if (!state.activeJudgeId) return;
+
+  const currentJudge = state.judges.find((j) => j.id === state.activeJudgeId);
+  if (!currentJudge) return;
+
+  const judge = buildJudgeFromState(
+    state,
+    state.activeJudgeId,
+    currentJudge.name,
+    currentJudge.createdAt
+  );
+
+  await storage.saveJudge(judge);
+
+  // Update judges list with new metadata
+  const updatedJudges = state.judges.map((j) =>
+    j.id === state.activeJudgeId
+      ? {
+          ...j,
+          updatedAt: judge.updatedAt,
+          testCaseCount: judge.testCases.length,
+          accuracy: judge.runStats?.accuracy ?? null,
+        }
+      : j
+  );
+
+  // Only update if we're still on the same judge
+  if (get().activeJudgeId === state.activeJudgeId) {
+    useTrainingStore.setState({ judges: updatedJudges });
+  }
+}, 500);
+
 export const useTrainingStore = create<TrainingStore>((set, get) => ({
   // Initial state
+  sidebarCollapsed: false,
+  judges: [],
+  activeJudgeId: null,
+  isLoadingJudges: false,
+
   intent: "",
   systemPrompt: "",
   testCases: [],
@@ -56,31 +145,199 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
   error: null,
   activeTab: "dataset",
 
-  // Simple setters
-  setIntent: (intent) => set({ intent }),
-  setSystemPrompt: (systemPrompt) => set({ systemPrompt }),
-  setSelectedModel: (selectedModel) => set({ selectedModel }),
-  setGenerateCount: (generateCount) => set({ generateCount }),
+  // UI Actions
+  toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+
+  // Judge management actions
+  loadJudges: async () => {
+    set({ isLoadingJudges: true });
+    try {
+      const judges = await storage.getAllJudges();
+
+      if (judges.length > 0) {
+        // Sort by updatedAt descending and select most recent
+        const sorted = [...judges].sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+        set({ judges: sorted, isLoadingJudges: false });
+
+        // Auto-select most recently updated judge
+        await get().selectJudge(sorted[0].id);
+      } else {
+        set({ judges: [], isLoadingJudges: false });
+      }
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : "Failed to load judges",
+        isLoadingJudges: false,
+      });
+    }
+  },
+
+  selectJudge: async (id: string) => {
+    const state = get();
+
+    // Save current judge first if there is one
+    if (state.activeJudgeId) {
+      const currentJudge = state.judges.find((j) => j.id === state.activeJudgeId);
+      if (currentJudge) {
+        const judge = buildJudgeFromState(
+          state,
+          state.activeJudgeId,
+          currentJudge.name,
+          currentJudge.createdAt
+        );
+        await storage.saveJudge(judge);
+      }
+    }
+
+    // Load new judge
+    const judge = await storage.getJudge(id);
+    if (judge) {
+      set({
+        activeJudgeId: id,
+        intent: judge.intent,
+        systemPrompt: judge.systemPrompt,
+        testCases: judge.testCases,
+        runStats: judge.runStats,
+        selectedModel: judge.selectedModel,
+        generateCount: judge.generateCount,
+        hasGenerated: judge.hasGenerated,
+        isSplit: judge.isSplit,
+        error: null,
+        activeTab: "dataset",
+      });
+    }
+  },
+
+  createJudge: async (name?: string) => {
+    const state = get();
+    const judgeName = name || `Judge ${state.judges.length + 1}`;
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+
+    const newJudge: Judge = {
+      id,
+      name: judgeName,
+      createdAt: now,
+      updatedAt: now,
+      intent: "",
+      systemPrompt: "",
+      testCases: [],
+      runStats: null,
+      selectedModel: "gpt-4o",
+      generateCount: 50,
+      hasGenerated: false,
+      isSplit: false,
+    };
+
+    await storage.saveJudge(newJudge);
+
+    const listItem: JudgeListItem = {
+      id,
+      name: judgeName,
+      createdAt: now,
+      updatedAt: now,
+      testCaseCount: 0,
+      accuracy: null,
+    };
+
+    set((state) => ({
+      judges: [listItem, ...state.judges],
+    }));
+
+    // Select the new judge
+    await get().selectJudge(id);
+
+    return id;
+  },
+
+  deleteJudge: async (id: string) => {
+    await storage.deleteJudge(id);
+
+    const state = get();
+    const updatedJudges = state.judges.filter((j) => j.id !== id);
+
+    set({ judges: updatedJudges });
+
+    // If we deleted the active judge, select another one
+    if (state.activeJudgeId === id) {
+      if (updatedJudges.length > 0) {
+        await get().selectJudge(updatedJudges[0].id);
+      } else {
+        // No judges left, reset state
+        set({
+          activeJudgeId: null,
+          intent: "",
+          systemPrompt: "",
+          testCases: [],
+          runStats: null,
+          selectedModel: "gpt-4o",
+          generateCount: 50,
+          hasGenerated: false,
+          isSplit: false,
+        });
+      }
+    }
+  },
+
+  renameJudge: async (id: string, newName: string) => {
+    const judge = await storage.getJudge(id);
+    if (judge) {
+      judge.name = newName;
+      await storage.saveJudge(judge);
+
+      set((state) => ({
+        judges: state.judges.map((j) =>
+          j.id === id ? { ...j, name: newName } : j
+        ),
+      }));
+    }
+  },
+
+  // Simple setters (with auto-persist)
+  setIntent: (intent) => {
+    set({ intent });
+    debouncedPersist(get);
+  },
+  setSystemPrompt: (systemPrompt) => {
+    set({ systemPrompt });
+    debouncedPersist(get);
+  },
+  setSelectedModel: (selectedModel) => {
+    set({ selectedModel });
+    debouncedPersist(get);
+  },
+  setGenerateCount: (generateCount) => {
+    set({ generateCount });
+    debouncedPersist(get);
+  },
   setActiveTab: (activeTab) => set({ activeTab }),
   clearError: () => set({ error: null }),
 
-  // Test case mutations
-  updateTestCase: (id, updates) =>
+  // Test case mutations (with auto-persist)
+  updateTestCase: (id, updates) => {
     set((state) => ({
       testCases: state.testCases.map((tc) =>
         tc.id === id ? { ...tc, ...updates } : tc
       ),
-    })),
+    }));
+    debouncedPersist(get);
+  },
 
-  deleteTestCase: (id) =>
+  deleteTestCase: (id) => {
     set((state) => ({
       testCases: state.testCases.filter((tc) => tc.id !== id),
-    })),
+    }));
+    debouncedPersist(get);
+  },
 
-  addTestCase: (testCase) =>
+  addTestCase: (testCase) => {
     set((state) => ({
       testCases: [...state.testCases, testCase],
-    })),
+    }));
+    debouncedPersist(get);
+  },
 
   // Async actions
   generateTestCases: async () => {
@@ -101,6 +358,7 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
         isSplit: false,
         runStats: null,
       });
+      debouncedPersist(get);
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : "Generation failed",
@@ -124,6 +382,7 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
         selectedModel
       );
       set({ runStats, isRunning: false, activeTab: "results" });
+      debouncedPersist(get);
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : "Evaluation failed",
@@ -150,6 +409,7 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
         systemPrompt: result.optimized_prompt,
         isOptimizing: false,
       });
+      debouncedPersist(get);
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : "Optimization failed",
@@ -177,6 +437,7 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
         isSplit: true,
         isSplitting: false,
       });
+      debouncedPersist(get);
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : "Split failed",

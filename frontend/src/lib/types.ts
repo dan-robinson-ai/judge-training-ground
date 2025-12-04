@@ -51,3 +51,28 @@ export interface SplitResponse {
   train_cases: TestCase[];
   test_cases: TestCase[];
 }
+
+// Multi-judge support types
+export interface Judge {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  intent: string;
+  systemPrompt: string;
+  testCases: TestCase[];
+  runStats: RunStats | null;
+  selectedModel: string;
+  generateCount: number;
+  hasGenerated: boolean;
+  isSplit: boolean;
+}
+
+export interface JudgeListItem {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  testCaseCount: number;
+  accuracy: number | null;
+}
