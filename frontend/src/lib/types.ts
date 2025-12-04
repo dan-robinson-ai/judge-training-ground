@@ -4,6 +4,7 @@ export interface TestCase {
   expected_verdict: "PASS" | "FAIL";
   reasoning: string;
   verified: boolean;
+  split?: "train" | "test" | null;
 }
 
 export interface EvaluationResult {
@@ -19,6 +20,7 @@ export interface RunStats {
   failed: number;
   errors: number;
   accuracy: number;
+  cohen_kappa: number;
   results: EvaluationResult[];
 }
 
@@ -44,3 +46,8 @@ export const AVAILABLE_MODELS: ModelOption[] = [
   { value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet", provider: "Anthropic" },
   { value: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku", provider: "Anthropic" },
 ];
+
+export interface SplitResponse {
+  train_cases: TestCase[];
+  test_cases: TestCase[];
+}

@@ -58,15 +58,33 @@ export function ResultsView() {
       ? "text-[#f5a623]"
       : "text-[#e5484d]";
 
+  // Cohen's Kappa interpretation
+  const getKappaInfo = (kappa: number) => {
+    if (kappa >= 0.81) return { label: "Almost Perfect", color: "text-[#30a46c]" };
+    if (kappa >= 0.61) return { label: "Substantial", color: "text-[#30a46c]" };
+    if (kappa >= 0.41) return { label: "Moderate", color: "text-[#f5a623]" };
+    if (kappa >= 0.21) return { label: "Fair", color: "text-[#f5a623]" };
+    return { label: "Slight", color: "text-[#e5484d]" };
+  };
+  const kappaInfo = getKappaInfo(runStats.cohen_kappa);
+
   return (
     <div className="flex h-full flex-col">
       {/* Stats Header */}
-      <div className="grid grid-cols-4 gap-4 p-4 border-b border-border">
+      <div className="grid grid-cols-5 gap-4 p-4 border-b border-border">
         <div className="text-center">
           <div className={`text-2xl font-bold ${accuracyColor}`}>
             {runStats.accuracy.toFixed(1)}%
           </div>
           <div className="text-xs text-muted-foreground">Accuracy</div>
+        </div>
+        <div className="text-center">
+          <div className={`text-2xl font-bold ${kappaInfo.color}`}>
+            {runStats.cohen_kappa.toFixed(2)}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Cohen&apos;s κ ({kappaInfo.label})
+          </div>
         </div>
         <div className="text-center">
           <div className="text-2xl font-bold text-[#30a46c]">
@@ -94,10 +112,11 @@ export function ResultsView() {
           <TableHeader>
             <TableRow className="hover:bg-transparent border-border">
               <TableHead className="w-[5%]"></TableHead>
-              <TableHead className="w-[35%]">Input</TableHead>
-              <TableHead className="w-[12%]">Expected</TableHead>
-              <TableHead className="w-[12%]">Actual</TableHead>
-              <TableHead className="w-[36%]">Judge Reasoning</TableHead>
+              <TableHead className="w-[8%]">Split</TableHead>
+              <TableHead className="w-[30%]">Input</TableHead>
+              <TableHead className="w-[10%]">Expected</TableHead>
+              <TableHead className="w-[10%]">Actual</TableHead>
+              <TableHead className="w-[37%]">Judge Reasoning</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -124,6 +143,22 @@ export function ResultsView() {
                       <CheckCircle className="h-5 w-5 text-[#30a46c]" />
                     ) : (
                       <XCircle className="h-5 w-5 text-[#e5484d]" />
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {testCase?.split ? (
+                      <Badge
+                        variant="outline"
+                        className={
+                          testCase.split === "train"
+                            ? "border-blue-500 text-blue-500"
+                            : "border-purple-500 text-purple-500"
+                        }
+                      >
+                        {testCase.split}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">-</span>
                     )}
                   </TableCell>
                   <TableCell className="font-mono text-sm max-w-0">

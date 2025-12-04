@@ -25,6 +25,8 @@ describe("TrainingStore", () => {
       isGenerating: false,
       isRunning: false,
       isOptimizing: false,
+      isSplitting: false,
+      isSplit: false,
       error: null,
       activeTab: "dataset",
     });
@@ -143,7 +145,7 @@ describe("TrainingStore", () => {
             {
               id: "gen-1",
               input_text: "Generated text",
-              expected_verdict: "PASS",
+              expected_verdict: "PASS" as const,
               reasoning: "Generated reasoning",
               verified: false,
             },
@@ -192,10 +194,11 @@ describe("TrainingStore", () => {
           failed: 0,
           errors: 0,
           accuracy: 100,
+          cohen_kappa: 1.0,
           results: [
             {
               test_case_id: "test-1",
-              actual_verdict: "PASS",
+              actual_verdict: "PASS" as const,
               reasoning: "Good",
               correct: true,
             },
@@ -261,10 +264,11 @@ describe("TrainingStore", () => {
             failed: 1,
             errors: 0,
             accuracy: 0,
+            cohen_kappa: 0,
             results: [
               {
                 test_case_id: "test-1",
-                actual_verdict: "FAIL",
+                actual_verdict: "FAIL" as const,
                 reasoning: "Wrong",
                 correct: false,
               },

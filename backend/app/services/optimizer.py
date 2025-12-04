@@ -1,8 +1,40 @@
 """Prompt optimization service."""
 
 import json
+import random
 from app.schemas import TestCase, EvaluationResult, OptimizeResponse, OptimizedPromptResponse
 from app.services.llm import call_llm
+
+
+def split_test_cases(
+    test_cases: list[TestCase],
+    train_ratio: float = 0.7,
+) -> tuple[list[TestCase], list[TestCase]]:
+    """
+    Split test cases into train and test sets.
+
+    Args:
+        test_cases: List of test cases to split
+        train_ratio: Ratio of cases for training (default 0.7 = 70%)
+
+    Returns:
+        Tuple of (train_cases, test_cases)
+    """
+    shuffled = test_cases.copy()
+    random.shuffle(shuffled)
+
+    split_idx = int(len(shuffled) * train_ratio)
+
+    train_cases = [
+        tc.model_copy(update={"split": "train"})
+        for tc in shuffled[:split_idx]
+    ]
+    test_split = [
+        tc.model_copy(update={"split": "test"})
+        for tc in shuffled[split_idx:]
+    ]
+
+    return train_cases, test_split
 
 
 OPTIMIZATION_PROMPT = """You are an expert prompt engineer. Your task is to improve a system prompt based on evaluation results.
@@ -31,16 +63,27 @@ async def optimize_prompt(
     results: list[EvaluationResult],
     model: str = "gpt-4o",
 ) -> OptimizeResponse:
-    """Optimize the system prompt based on evaluation results."""
+    """Optimize the system prompt based on evaluation results.
+
+    If test cases have been split, only train cases are used for optimization
+    to prevent overfitting to the test set.
+    """
+    # Filter to train cases only (if split has been applied)
+    train_cases = [
+        tc for tc in test_cases
+        if tc.split == "train" or tc.split is None
+    ]
+    train_case_ids = {tc.id for tc in train_cases}
+    train_results = [r for r in results if r.test_case_id in train_case_ids]
 
     # Build lookup for test cases
-    tc_lookup = {tc.id: tc for tc in test_cases}
+    tc_lookup = {tc.id: tc for tc in train_cases}
 
     # Separate passed and failed cases
     failed_cases = []
     passed_cases = []
 
-    for result in results:
+    for result in train_results:
         tc = tc_lookup.get(result.test_case_id)
         if not tc:
             continue

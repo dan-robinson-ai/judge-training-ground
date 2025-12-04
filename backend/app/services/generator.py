@@ -53,12 +53,13 @@ async def generate_test_cases(
         Tuple of (list of TestCase objects, generated system prompt)
     """
     # Generate test cases using structured output
+    # Note: Always use gpt-4o as it supports structured outputs via response_format
     test_cases_prompt = GENERATION_PROMPT.format(intent=intent, count=count)
 
     generated = await call_llm(
         messages=[{"role": "user", "content": test_cases_prompt}],
         response_model=GeneratedTestCaseList,
-        model=model,
+        model="gpt-4o",
         temperature=0.8,
     )
 
@@ -79,7 +80,7 @@ async def generate_test_cases(
     system_prompt_response = await call_llm(
         messages=[{"role": "user", "content": system_prompt_prompt}],
         response_model=GeneratedSystemPrompt,
-        model=model,
+        model="gpt-4o",
         temperature=0.7,
     )
 

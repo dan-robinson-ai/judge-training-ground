@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Sparkles, Play, Wand2, Loader2 } from "lucide-react";
+import { Sparkles, Play, Wand2, Loader2, Split } from "lucide-react";
 
 export function PromptEditor() {
   const {
@@ -31,9 +31,12 @@ export function PromptEditor() {
     isGenerating,
     isRunning,
     isOptimizing,
+    isSplitting,
+    isSplit,
     generateTestCases,
     runEvaluation,
     optimizePrompt,
+    splitDataset,
   } = useTrainingStore();
 
   const canOptimize = runStats && runStats.accuracy < 100;
@@ -129,6 +132,33 @@ export function PromptEditor() {
             placeholder="System prompt will be generated..."
             className="flex-1 resize-none bg-secondary/50 border-border font-mono text-sm"
           />
+        </div>
+      )}
+
+      {/* Split Dataset Button - Only shown after generation */}
+      {hasGenerated && !isSplit && (
+        <Button
+          onClick={splitDataset}
+          disabled={isSplitting || testCases.length === 0}
+          variant="outline"
+          className="w-full"
+        >
+          {isSplitting ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Split className="mr-2 h-4 w-4" />
+          )}
+          Split Dataset (70/30)
+        </Button>
+      )}
+
+      {/* Split Status */}
+      {isSplit && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary/50 rounded-md px-3 py-2">
+          <Split className="h-4 w-4" />
+          <span>
+            Dataset split: {testCases.filter(tc => tc.split === "train").length} train / {testCases.filter(tc => tc.split === "test").length} test
+          </span>
         </div>
       )}
 

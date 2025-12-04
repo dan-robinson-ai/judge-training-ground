@@ -41,6 +41,7 @@ class TestCase(BaseModel):
     expected_verdict: Literal["PASS", "FAIL"]
     reasoning: str
     verified: bool = False
+    split: Literal["train", "test"] | None = None  # None = not yet split
 
 
 class EvaluationResult(BaseModel):
@@ -78,6 +79,7 @@ class RunStats(BaseModel):
     failed: int
     errors: int
     accuracy: float
+    cohen_kappa: float = 0.0  # Inter-rater agreement metric
     results: list[EvaluationResult]
 
 
@@ -92,3 +94,15 @@ class OptimizeResponse(BaseModel):
     """Response containing the optimized prompt."""
     optimized_prompt: str
     modification_notes: str
+
+
+class SplitRequest(BaseModel):
+    """Request to split test cases into train/test sets."""
+    test_cases: list[TestCase]
+    train_ratio: float = Field(default=0.7, ge=0.1, le=0.9, description="Ratio of cases for training")
+
+
+class SplitResponse(BaseModel):
+    """Response containing split test cases."""
+    train_cases: list[TestCase]
+    test_cases: list[TestCase]

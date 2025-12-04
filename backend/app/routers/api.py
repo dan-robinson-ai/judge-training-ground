@@ -5,11 +5,14 @@ from app.schemas import (
     RunRequest,
     RunStats,
     OptimizeRequest,
-    OptimizeResponse
+    OptimizeResponse,
+    SplitRequest,
+    SplitResponse,
 )
 from app.services.generator import generate_test_cases
 from app.services.judge import LLMJudge
-from app.services.optimizer import optimize_prompt
+from app.services.optimizer import optimize_prompt, split_test_cases
+from app.services.metrics import calculate_cohen_kappa
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -48,12 +51,16 @@ async def run_endpoint(request: RunRequest) -> RunStats:
         failed = total - passed - errors
         accuracy = (passed / total * 100) if total > 0 else 0
 
+        # Calculate Cohen's Kappa
+        kappa = calculate_cohen_kappa(results, request.test_cases)
+
         return RunStats(
             total=total,
             passed=passed,
             failed=failed,
             errors=errors,
             accuracy=round(accuracy, 2),
+            cohen_kappa=round(kappa, 3),
             results=results
         )
     except Exception as e:
@@ -74,3 +81,16 @@ async def optimize_endpoint(request: OptimizeRequest) -> OptimizeResponse:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Optimization failed: {str(e)}")
+
+
+@router.post("/split", response_model=SplitResponse)
+async def split_endpoint(request: SplitRequest) -> SplitResponse:
+    """Split test cases into train and test sets for unbiased evaluation."""
+    try:
+        train_cases, test_cases = split_test_cases(
+            test_cases=request.test_cases,
+            train_ratio=request.train_ratio
+        )
+        return SplitResponse(train_cases=train_cases, test_cases=test_cases)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Split failed: {str(e)}")

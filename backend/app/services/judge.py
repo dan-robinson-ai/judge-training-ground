@@ -48,9 +48,15 @@ Provide your verdict and detailed reasoning."""
             )
 
     async def evaluate_batch(self, test_cases: list[TestCase]) -> list[EvaluationResult]:
-        """Evaluate multiple test cases concurrently using asyncio.gather."""
+        """Evaluate multiple test cases concurrently, limited to 10 at a time."""
 
-        tasks = [self.evaluate_single(tc) for tc in test_cases]
+        semaphore = asyncio.Semaphore(10)
+
+        async def limited_evaluate(tc: TestCase) -> EvaluationResult:
+            async with semaphore:
+                return await self.evaluate_single(tc)
+
+        tasks = [limited_evaluate(tc) for tc in test_cases]
         results = await asyncio.gather(*tasks)
 
         return list(results)

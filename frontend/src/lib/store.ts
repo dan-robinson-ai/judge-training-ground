@@ -14,6 +14,8 @@ interface TrainingStore {
   isGenerating: boolean;
   isRunning: boolean;
   isOptimizing: boolean;
+  isSplitting: boolean;
+  isSplit: boolean;
   error: string | null;
   activeTab: "dataset" | "results";
 
@@ -34,6 +36,7 @@ interface TrainingStore {
   generateTestCases: () => Promise<void>;
   runEvaluation: () => Promise<void>;
   optimizePrompt: () => Promise<void>;
+  splitDataset: () => Promise<void>;
 }
 
 export const useTrainingStore = create<TrainingStore>((set, get) => ({
@@ -48,6 +51,8 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
   isGenerating: false,
   isRunning: false,
   isOptimizing: false,
+  isSplitting: false,
+  isSplit: false,
   error: null,
   activeTab: "dataset",
 
@@ -93,6 +98,8 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
         systemPrompt: response.system_prompt,
         hasGenerated: true,
         isGenerating: false,
+        isSplit: false,
+        runStats: null,
       });
     } catch (error) {
       set({
@@ -147,6 +154,33 @@ export const useTrainingStore = create<TrainingStore>((set, get) => ({
       set({
         error: error instanceof Error ? error.message : "Optimization failed",
         isOptimizing: false,
+      });
+    }
+  },
+
+  splitDataset: async () => {
+    const { testCases, isSplit } = get();
+    if (testCases.length === 0) {
+      set({ error: "No test cases to split" });
+      return;
+    }
+    if (isSplit) {
+      set({ error: "Dataset is already split" });
+      return;
+    }
+
+    set({ isSplitting: true, error: null });
+    try {
+      const response = await api.splitDataset(testCases);
+      set({
+        testCases: [...response.train_cases, ...response.test_cases],
+        isSplit: true,
+        isSplitting: false,
+      });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : "Split failed",
+        isSplitting: false,
       });
     }
   },
